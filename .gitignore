@@ -1,0 +1,26 @@
+﻿# Python
+.venv/
+__pycache__/
+*.pyc
+.env
+.env.*
+
+# Node
+node_modules/
+npm-debug.log*
+yarn.lock
+pnpm-lock.yaml
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker & data
+*.log
+*.sqlite
+dist/
+build/
