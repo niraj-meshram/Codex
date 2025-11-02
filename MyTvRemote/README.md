@@ -45,6 +45,23 @@ The extracted directory mirrors this repository’s contents, producing the `MyT
   - `docs/` – Platform requirements, architecture diagrams, onboarding guides, troubleshooting references, and deployment
     collateral including store metadata.
 
+## Interactive TUI
+- Start the interactive controller: `npm start`
+- Features: list devices, connect selection, and control via keyboard.
+- Keys: Up/Down select, Enter connect, `S` powerOn, `P` powerOff, `R` refresh, `Q` quit.
+- Entry point: `scripts/tui.js` (built output is used via `dist/`).
+
+## Wi‑Fi Configuration
+- Edit `config/wifi.json` to add devices and optional controller base URL.
+- Fields:
+  - `controllerBaseUrl` – HTTP base for a central controller (optional).
+  - `supportedCommands` – e.g., `["powerOn", "powerOff"]`.
+  - `devices[]` – `{ id, name, ip, port, metadata }`.
+- Behavior:
+  - If `controllerBaseUrl` is set, commands POST to `/devices/<id>/commands` on that base.
+  - Otherwise a per‑device fallback posts to `http://<ip>:<port>/devices/<id>/commands`.
+- Files to review: `scripts/tui.js` and `src/transports/WifiTransportAdapter.ts`.
+
 ## Licensing & Compliance
 See `docs/privacy-compliance.md` and `docs/protocols-and-requirements.md` for SDK licensing notes and data protection
 obligations.
