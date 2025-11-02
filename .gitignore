@@ -6,7 +6,7 @@ __pycache__/
 .env.*
 
 # Node
-node_modules/
+**/node_modules/
 npm-debug.log*
 yarn.lock
 pnpm-lock.yaml
@@ -22,5 +22,5 @@ Thumbs.db
 # Docker & data
 *.log
 *.sqlite
-dist/
-build/
+**/dist/
+**/build/
