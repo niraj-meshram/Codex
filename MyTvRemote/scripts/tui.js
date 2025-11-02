@@ -6,10 +6,14 @@
 // - Quit with [Q] or Ctrl+C
 
 const readline = require('readline');
+const fs = require('fs');
+const path = require('path');
+const axios = require('axios');
 const {
   CommandDispatcher,
   IrTransportAdapter,
   BluetoothTransportAdapter,
+  WifiTransportAdapter,
 } = require('../dist/index.js');
 
 function clear() {
@@ -18,6 +22,45 @@ function clear() {
 
 function clamp(n, min, max) {
   return Math.max(min, Math.min(max, n));
+}
+
+function loadWifiConfig() {
+  const cfgPath = path.resolve(__dirname, '..', 'config', 'wifi.json');
+  if (!fs.existsSync(cfgPath)) return null;
+  try {
+    const raw = fs.readFileSync(cfgPath, 'utf8');
+    return JSON.parse(raw);
+  } catch (e) {
+    events.log.push(`[wifi] failed to parse config: ${e.message || e}`);
+    return null;
+  }
+}
+
+function createWifiAdapterFromConfig(cfg) {
+  if (!cfg || !Array.isArray(cfg.devices) || cfg.devices.length === 0) return null;
+  const registryFn = WifiTransportAdapter.createInMemoryRegistry(cfg.devices);
+
+  if (cfg.controllerBaseUrl) {
+    const http = WifiTransportAdapter.createHttpClient(cfg.controllerBaseUrl);
+    return new WifiTransportAdapter(http, registryFn, cfg.supportedCommands || ['powerOn', 'powerOff']);
+  }
+
+  // Fallback: dynamic per-device posting using absolute URLs
+  const deviceMap = new Map(cfg.devices.map((d) => [d.id, d]));
+  const http = {
+    async post(url, payload) {
+      // url is like /devices/<id>/commands — translate to device base
+      const m = String(url).match(/\/devices\/([^/]+)\/commands/);
+      const id = m && m[1];
+      const entry = id && deviceMap.get(id);
+      if (!entry) throw new Error(`wifi: unknown device ${id}`);
+      const base = `http://${entry.ip}:${entry.port}`;
+      // Attempt to POST to a generic endpoint; adjust to your device API if needed
+      const finalUrl = `${base}/devices/${id}/commands`;
+      return axios.post(finalUrl, payload, { timeout: 2500 });
+    },
+  };
+  return new WifiTransportAdapter(http, registryFn, cfg.supportedCommands || ['powerOn', 'powerOff']);
 }
 
 async function createDispatcher() {
@@ -34,13 +77,17 @@ async function createDispatcher() {
   const btClient = BluetoothTransportAdapter.createMockClient();
   const bt = new BluetoothTransportAdapter(btClient, ['powerOn', 'powerOff']);
 
-  const dispatcher = new CommandDispatcher(
-    [ir, bt],
-    {
-      powerOn: { protocols: ['bluetooth', 'wifi', 'ir'] },
-      powerOff: { protocols: ['bluetooth', 'wifi', 'ir'] },
-    }
-  );
+  const transports = [ir, bt];
+  const wifiCfg = loadWifiConfig();
+  if (wifiCfg) {
+    const wifi = createWifiAdapterFromConfig(wifiCfg);
+    if (wifi) transports.push(wifi);
+  }
+
+  const dispatcher = new CommandDispatcher(transports, {
+    powerOn: { protocols: ['bluetooth', 'wifi', 'ir'] },
+    powerOff: { protocols: ['bluetooth', 'wifi', 'ir'] },
+  });
 
   return dispatcher;
 }
@@ -200,4 +247,3 @@ main().catch((err) => {
   console.error(err);
   process.exit(1);
 });
-
