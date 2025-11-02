@@ -8,7 +8,7 @@ __pycache__/
 .env.*
 
 # Node
-node_modules/
+
 **/node_modules/
 npm-debug.log*
 **/npm-debug.log*
@@ -33,6 +33,7 @@ Thumbs.db
 *.log
 **/*.log
 *.sqlite
+
 **/*.sqlite
 dist/
 **/dist/
