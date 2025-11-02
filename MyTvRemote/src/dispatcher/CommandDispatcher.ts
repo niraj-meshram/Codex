@@ -28,16 +28,16 @@ export class CommandDispatcher {
     const targetAdapter = this.selectAdapter(command, deviceId);
 
     if (!targetAdapter) {
-      this.emitter.emit('command:unsupported', [{ deviceId, payload }]);
+      this.emitter.emit('command:unsupported', { deviceId, payload });
       throw new Error(`No transport available for command ${command}`);
     }
 
     await targetAdapter.sendCommand(deviceId, payload);
-    this.emitter.emit('command:sent', [{
+    this.emitter.emit('command:sent', {
       deviceId,
       protocol: targetAdapter.protocol,
       payload
-    }]);
+    });
   }
 
   async discover(): Promise<DiscoveryResult[]> {
