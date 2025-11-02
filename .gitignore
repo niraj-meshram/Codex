@@ -1,26 +1,44 @@
-﻿# Python
+# Python
 .venv/
+**/.venv/
 __pycache__/
+**/__pycache__/
 *.pyc
 .env
 .env.*
 
 # Node
 node_modules/
+**/node_modules/
 npm-debug.log*
+**/npm-debug.log*
 yarn.lock
+**/yarn.lock
 pnpm-lock.yaml
+**/pnpm-lock.yaml
 
 # IDE
 .vscode/
+**/.vscode/
 .idea/
+**/.idea/
 
 # OS
 .DS_Store
+**/.DS_Store
 Thumbs.db
+**/Thumbs.db
 
-# Docker & data
+# Build artifacts & logs
 *.log
+**/*.log
 *.sqlite
+**/*.sqlite
 dist/
+**/dist/
 build/
+**/build/
+
+# Project artifacts
+MyTvRemote/MyTvRemote.tar.gz
+MyTvRemote/MyTvRemote.tar.gz.base64
