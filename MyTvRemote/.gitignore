@@ -22,4 +22,5 @@ Thumbs.db
 # Docker & data
 *.log
 *.sqlite
-
+**/dist/
+**/build/
