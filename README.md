@@ -1,5 +1,4 @@
 
-# Codex
 
 This repository hosts the **MyTvRemote** application and supporting assets.
 
@@ -21,7 +20,7 @@ This repository hosts the **MyTvRemote** application and supporting assets.
    ```
 
 For offline transfers, decode the bundled `MyTvRemote.tar.gz.base64` file inside the `MyTvRemote/` directory following the instructions in `MyTvRemote/README.md`.
-=======
+
 
 # MyTvRemote Repository
 
