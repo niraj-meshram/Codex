@@ -1,14 +1,12 @@
 {
-  "controllerBaseUrl": "http://localhost:8080",
-  "supportedCommands": ["powerOn", "powerOff"],
+  "supportedCommands": ["powerOn", "powerOff", "volumeUp", "volumeDown", "mute"],
   "devices": [
     {
-      "id": "living-room",
-      "name": "Living Room TV",
-      "ip": "192.168.1.100",
-      "port": 8008,
-      "metadata": { "brand": "Acme", "model": "LR-1000" }
+      "id": "samsung-10-0-0-139",
+      "name": "Samsung TV",
+      "ip": "10.0.0.139",
+      "port": 8001,
+      "vendor": "samsung-tizen"
     }
   ]
 }
-
