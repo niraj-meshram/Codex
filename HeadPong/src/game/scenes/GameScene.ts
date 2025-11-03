@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { WORLD_BOUNDS, UI_PANEL_WIDTH, PLAYFIELD_BOUNDS } from '../config/gameConfig';
-import { Theme } from '../../theme/Theme';
+import { getTheme, initThemeFromURL } from '../../theme/Theme';
 import { BrickWall } from '../objects/BrickWall';
 import { KeyboardHead } from '../../input/KeyboardHead';
 
@@ -57,6 +57,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   create(): void {
+    initThemeFromURL();
     this.setupLayout();
     this.createBackground();
     this.createPaddle();
@@ -145,7 +146,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private spawnTrailDot(x: number, y: number): void {
-    const dot = this.add.circle(x, y, 6, 0x38bdf8, 0.5).setDepth(5);
+    const dot = this.add.circle(x, y, 6, getTheme().accent, 0.5).setDepth(5);
     this.tweens.add({
       targets: dot,
       alpha: 0,
@@ -163,7 +164,7 @@ export class GameScene extends Phaser.Scene {
       const speed = Phaser.Math.FloatBetween(60, 180);
       const dx = Math.cos(angle) * speed;
       const dy = Math.sin(angle) * speed;
-      const p = this.add.circle(x, y, 4, 0xf97316, 0.9).setDepth(8);
+      const p = this.add.circle(x, y, 4, getTheme().danger, 0.9).setDepth(8);
       this.tweens.add({
         targets: p,
         x: x + dx * 0.3,
@@ -223,13 +224,15 @@ export class GameScene extends Phaser.Scene {
       this.playfieldBorder.setDepth(1000);
     }
     const g = this.playfieldBorder;
+    const theme = getTheme();
     g.clear();
-    g.lineStyle(4, 0x38bdf8, 1);
+    g.lineStyle(4, theme.accent, 1);
     // Draw border aligned exactly to the playfield viewport
     g.strokeRect(0, 0, Math.max(0, this.playWidth), Math.max(0, this.playHeight));
   }
 
   private createBackground(): void {
+    const theme = getTheme();
     // Soft gradient background inside the playfield
     if (!this.bgGraphics) {
       this.bgGraphics = this.add.graphics();
@@ -238,9 +241,9 @@ export class GameScene extends Phaser.Scene {
     const g = this.bgGraphics;
     g.clear();
     // Draw two translucent rectangles to fake a gradient overlay
-    g.fillStyle(Theme.bgTop, 1);
+    g.fillStyle(theme.bgTop, 1);
     g.fillRect(0, 0, this.playWidth, this.playHeight);
-    g.fillStyle(Theme.bgBottom, 0.65);
+    g.fillStyle(theme.bgBottom, 0.65);
     g.fillRect(0, this.playHeight * 0.4, this.playWidth, this.playHeight * 0.6);
 
     // No particle managers (removed in Phaser 3.60); we'll use lightweight circle tweens for FX

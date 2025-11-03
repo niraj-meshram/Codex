@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { UI_PANEL_WIDTH, WORLD_BOUNDS } from '../config/gameConfig';
+import { getTheme, initThemeFromURL } from '../../theme/Theme';
 
 interface UISceneData {
   state: {
@@ -35,6 +36,7 @@ export class UIScene extends Phaser.Scene {
   }
 
   create(data: UISceneData): void {
+    initThemeFromURL();
     // Two cameras: full-screen overlay and a left-side panel (20% width)
     this.overlayCam = this.cameras.main;
     const outerMargin = Math.max(12, Math.floor(this.scale.width * 0.02));
@@ -93,23 +95,24 @@ export class UIScene extends Phaser.Scene {
     const panelWidth = Math.floor(innerWidth * 0.2);
     const pad = 12;
     // Panel background on left side
-    this.panelBg = this.add.rectangle(0, 0, panelWidth, this.panelCam!.height, 0x0b1222, 0.82).setOrigin(0, 0);
+    this.panelBg = this.add.rectangle(0, 0, panelWidth, this.panelCam!.height, getTheme().panelBg, 0.88).setOrigin(0, 0);
     // Bold border for the panel
-    this.panelBg.setStrokeStyle(4, 0x38bdf8, 1);
+    this.panelBg.setStrokeStyle(4, getTheme().panelBorder, 1);
     this.panelBg.setDepth(9);
     this.panelObjects.push(this.panelBg);
 
+    const t = getTheme();
     const buttonStyle = {
-      fontFamily: '"Press Start 2P", monospace',
+      fontFamily: t.fontFamily,
       fontSize: '14px',
-      color: '#0f172a',
-      backgroundColor: '#38bdf8'
+      color: t.buttonText,
+      backgroundColor: t.buttonBg
     } as Phaser.Types.GameObjects.Text.TextStyle;
 
     // Move score text into panel area
     if (this.scoreText) {
       this.scoreText.setPosition(panelWidth / 2, pad * 1.5);
-      this.scoreText.setStyle({ align: 'center', wordWrap: { width: panelWidth - pad * 2 } });
+      this.scoreText.setStyle({ align: 'center', color: t.textPrimary, fontFamily: t.fontFamily, wordWrap: { width: panelWidth - pad * 2 } });
       this.scoreText.setOrigin(0.5, 0);
       this.scoreText.setDepth(10);
       this.panelObjects.push(this.scoreText);
@@ -159,9 +162,9 @@ export class UIScene extends Phaser.Scene {
 
     // Controls header and help text
     this.controlsHeader = this.add.text(panelWidth / 2, sepY + 12, 'Controls', {
-      fontFamily: 'Poppins, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
+      fontFamily: t.fontFamily,
       fontSize: '14px',
-      color: '#e5e7eb',
+      color: t.textPrimary,
       align: 'center'
     }).setOrigin(0.5, 0);
     this.controlsHeader.setDepth(10);
@@ -173,9 +176,9 @@ export class UIScene extends Phaser.Scene {
       'Restart: Space/Enter'
     ].join('\n');
     this.controlsHelp = this.add.text(panelWidth / 2, sepY + 36, help, {
-      fontFamily: 'Poppins, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
+      fontFamily: t.fontFamily,
       fontSize: '12px',
-      color: '#94a3b8',
+      color: t.textSecondary,
       align: 'center',
       wordWrap: { width: panelWidth - pad * 2 }
     }).setOrigin(0.5, 0);
@@ -184,7 +187,7 @@ export class UIScene extends Phaser.Scene {
 
     // Vertical divider line at the right edge of the score panel (into the gutter)
     this.panelDivider = this.add.graphics();
-    this.panelDivider.lineStyle(2, 0x38bdf8, 1);
+    this.panelDivider.lineStyle(2, getTheme().panelBorder, 1);
     this.panelDivider.beginPath();
     const lineX = panelWidth - 2; // stay within panel camera bounds
     this.panelDivider.moveTo(lineX, 0);
@@ -232,16 +235,16 @@ export class UIScene extends Phaser.Scene {
     const cy = ov.scrollY + ov.height / 2;
 
     this.gameOverTitle = this.add.text(cx, cy - 30, 'GAME OVER', {
-      fontFamily: '"Press Start 2P", monospace',
+      fontFamily: t.fontFamily,
       fontSize: '48px',
-      color: '#f97316',
+      color: '#ef4444',
       align: 'center'
     }).setOrigin(0.5);
 
     this.gameOverScore = this.add.text(cx, cy + 24, `Score: ${score}`, {
-      fontFamily: '"Press Start 2P", monospace',
+      fontFamily: t.fontFamily,
       fontSize: '24px',
-      color: '#f8fafc',
+      color: t.textPrimary,
       align: 'center'
     }).setOrigin(0.5);
 
@@ -272,16 +275,16 @@ export class UIScene extends Phaser.Scene {
     const cy = ov.scrollY + ov.height / 2;
 
     this.gameOverTitle = this.add.text(cx, cy - 30, 'YOU WIN', {
-      fontFamily: '"Press Start 2P", monospace',
+      fontFamily: t.fontFamily,
       fontSize: '48px',
       color: '#22c55e',
       align: 'center'
     }).setOrigin(0.5);
 
     this.gameOverScore = this.add.text(cx, cy + 24, `Score: ${score}`, {
-      fontFamily: '"Press Start 2P", monospace',
+      fontFamily: t.fontFamily,
       fontSize: '24px',
-      color: '#f8fafc',
+      color: t.textPrimary,
       align: 'center'
     }).setOrigin(0.5);
 
