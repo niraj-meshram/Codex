@@ -85,8 +85,27 @@ pm start
 - Laptop and TV must be on the same LAN/SSID; disconnect VPNs for discovery/control.
 - Samsung Tizen typically listens on ws://<tv>:8001 (or wss://<tv>:8002). Enable network standby on the TV for reliable control.
 - Corporate SSIDs (e.g., groupinfra.com) often isolate devices; switch to your home SSID (e.g., Slow_Poison).
+
+## Troubleshooting
+- Wi‑Fi shows corporate SSID
+  - Switch your laptop to the same home SSID as the TV (Slow_Poison), or plug into the same router via Ethernet.
+  - On Windows, confirm with 
+etsh wlan show interfaces.
+- No devices found
+  - Ensure laptop and TV are on the same LAN and VPN is off.
+  - Press S again; SSDP can take a moment. Some networks block multicast; add your TV in config/wifi.json and rebuild.
+- Samsung TV won’t connect
+  - Accept the pairing prompt on the TV when first connecting.
+  - Enable Network Standby/Wake on LAN/WLAN in TV settings.
+  - Test ports: Windows Test-NetConnection <tv-ip> -Port 8001 (or 8002).
+- Controls don’t work after connect
+  - Try H (home) first; then P (power toggle) and volume keys.
+  - If still failing, restart the app and the TV, then reconnect.
+- Staying on corporate Wi‑Fi
+  - Use a second adapter (USB Wi‑Fi) for the home SSID and add a route for the TV subnet, or use a cloud connector (e.g., SmartThings).
 ## Licensing & Compliance
 See `docs/privacy-compliance.md` and `docs/protocols-and-requirements.md` for SDK licensing notes and data protection
 obligations.
+
 
 
