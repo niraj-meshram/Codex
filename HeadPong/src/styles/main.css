@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap');
 
 :root {
   color-scheme: dark;
@@ -14,9 +14,9 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: radial-gradient(circle at top, #0f172a 0%, #020617 60%, #000 100%);
-  font-family: 'Press Start 2P', monospace;
-  color: #f8fafc;
+  background: linear-gradient(180deg, #0b1020 0%, #030712 100%);
+  font-family: 'Poppins', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  color: #e5e7eb;
 }
 
 #app {
@@ -27,6 +27,6 @@ body {
 }
 
 canvas {
-  border-radius: 12px;
-  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.45);
+  border-radius: 14px;
+  box-shadow: 0 30px 60px rgba(3, 7, 18, 0.55);
 }
