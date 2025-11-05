@@ -5,6 +5,7 @@ import { UIScene } from '../scenes/UIScene';
 
 const GAME_WIDTH = 960;
 const GAME_HEIGHT = 540;
+export const UI_PANEL_WIDTH = Math.floor(GAME_WIDTH * 0.2);
 
 export const gameConfig: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
@@ -28,5 +29,10 @@ export const gameConfig: Phaser.Types.Core.GameConfig = {
 
 export const WORLD_BOUNDS = {
   width: GAME_WIDTH,
+  height: GAME_HEIGHT
+};
+
+export const PLAYFIELD_BOUNDS = {
+  width: GAME_WIDTH - UI_PANEL_WIDTH,
   height: GAME_HEIGHT
 };

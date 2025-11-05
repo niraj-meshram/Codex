@@ -1,4 +1,4 @@
-import * as facemesh from '@tensorflow-models/facemesh';
+import * as faceLandmarksDetection from '@tensorflow-models/face-landmarks-detection';
 import '@tensorflow/tfjs-backend-webgl';
 import '@tensorflow/tfjs-converter';
 import * as tf from '@tensorflow/tfjs-core';
@@ -12,7 +12,7 @@ interface HeadPosition {
 const SMOOTHING_ALPHA = 0.35;
 
 export class HeadTracker extends Phaser.Events.EventEmitter {
-  private model?: facemesh.FaceMesh;
+  private detector?: faceLandmarksDetection.FaceLandmarksDetector;
   private videoElement?: HTMLVideoElement;
   private animationFrame?: number;
   private latestPosition: HeadPosition = { x: 0.5, y: 0.5 };
@@ -41,7 +41,10 @@ export class HeadTracker extends Phaser.Events.EventEmitter {
     }
     await tf.ready();
 
-    this.model = await facemesh.load({ maxFaces: 1, refineLandmarks: true });
+    this.detector = await faceLandmarksDetection.createDetector(
+      faceLandmarksDetection.SupportedModels.MediaPipeFaceMesh,
+      { runtime: 'tfjs', refineLandmarks: true, maxFaces: 1 }
+    );
     this.active = true;
     this.processFrame();
   }
@@ -57,8 +60,8 @@ export class HeadTracker extends Phaser.Events.EventEmitter {
       this.videoElement.srcObject.getTracks().forEach((track) => track.stop());
     }
     this.videoElement = undefined;
-    this.model?.dispose();
-    this.model = undefined;
+    this.detector?.dispose();
+    this.detector = undefined;
   }
 
   destroy(): void {
@@ -80,12 +83,8 @@ export class HeadTracker extends Phaser.Events.EventEmitter {
     }
 
     try {
-      if (this.model && this.videoElement) {
-        const predictions = await this.model.estimateFaces({
-          input: this.videoElement,
-          returnTensors: false,
-          flipHorizontal: true
-        });
+      if (this.detector && this.videoElement) {
+        const predictions = await this.detector.estimateFaces(this.videoElement, { flipHorizontal: true });
 
         this.handlePredictions(predictions);
       }
@@ -96,9 +95,9 @@ export class HeadTracker extends Phaser.Events.EventEmitter {
     this.animationFrame = requestAnimationFrame(this.processFrame);
   };
 
-  private handlePredictions(predictions: facemesh.AnnotatedPrediction[]): void {
+  private handlePredictions(predictions: Array<any>): void {
     try {
-      if (!predictions.length || !predictions[0].scaledMesh) {
+      if (!predictions.length) {
         this.emit('tracking-lost');
         return;
       }
@@ -107,7 +106,8 @@ export class HeadTracker extends Phaser.Events.EventEmitter {
         return;
       }
 
-      const mesh = predictions[0].scaledMesh;
+      // Support both old facemesh (scaledMesh) and new detector (keypoints)
+      const mesh = (predictions[0] as any).keypoints ?? (predictions[0] as any).scaledMesh;
 
       const keyIndices = [1, 4, 9, 10];
       const { sum, count } = keyIndices.reduce(
@@ -116,7 +116,9 @@ export class HeadTracker extends Phaser.Events.EventEmitter {
           if (!landmark) {
             return acc;
           }
-          const [x, y] = landmark as [number, number, number?];
+          // keypoints: {x, y, z?}; scaledMesh: [x, y, z?]
+          const x = typeof landmark.x === 'number' ? landmark.x : (landmark[0] as number);
+          const y = typeof landmark.y === 'number' ? landmark.y : (landmark[1] as number);
           return {
             sum: {
               x: acc.sum.x + x / videoElement.videoWidth,
