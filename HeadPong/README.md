@@ -1,120 +1,48 @@
 # HeadPong
 
-HeadPong is a modern twist on the classic brick breaker game that uses real-time head tracking to control the paddle. This project is bootstrapped with Vite, written in TypeScript, and powered by Phaser 3 for rendering and physics.
+An arcade paddle game built with Phaser 3 and TypeScript. Steer the paddle with your head using your webcam (TensorFlow.js face landmarks) or play with keyboard/mouse. Break all bricks without dropping the ball.
 
-## Getting Started
+**Features**
+- Head tracking control using `@tensorflow-models/face-landmarks-detection` (WebGL backend)
+- Keyboard and pointer control fallback (A/D or Left/Right, mouse/touch)
+- Clean UI panel with score, controls, camera status, and actions
+- Responsive playfield with crisp borders, impact bursts, and subtle trail FX
+- Lightweight build via Vite; fully static deployable site
 
-### Prerequisites
-- Node.js 18+
-- A webcam for head tracking
-- Modern browser with WebGL support
+**Quick Start**
+- Prerequisites: Node.js 18+ and npm
+- Install: `npm install`
+- Dev server: `npm run dev` then open `http://localhost:5173`
 
-### Installation
+**Controls**
+- Move: Left/Right arrows or `A`/`D`
+- Start/Restart: `A`
+- Restart: `Space` or `Enter`
+- Mouse/touch: Move pointer in the playfield to steer when head tracking is off
 
-From your repository root (for example `C:\\Users\\niraj.meshram\\Desktop\\OPEN_AI\\Workspace\\Codex`), install the project dependencies:
+**Camera Mode (Head Tracking)**
+- Start with camera input: open the app with `?input=cam` (also accepts `camera` or `head`), e.g. `http://localhost:5173/?input=cam`
+- Grant camera permission when prompted; processing stays on-device
+- Stop camera: click the “Stop Camera” button in the left panel
 
-```powershell
-cd C:\\Users\\niraj.meshram\\Desktop\\OPEN_AI\\Workspace\\Codex\\HeadPong
-npm install
-```
+**Theming**
+- URL param `?theme=` switches themes: `tesla` (default) or `airbnb`
+- Example: `http://localhost:5173/?theme=airbnb` or combine with camera `?input=cam&theme=airbnb`
 
-### Development Server
+**Build & Preview**
+- Type-check: `npm run typecheck`
+- Production build: `npm run build` (outputs to `dist/`)
+- Preview local build: `npm run preview`
 
-```powershell
-npm run dev
-```
+**Deploy**
+- Static hosting: serve the `dist/` folder on any static host
+- Optional security headers for Netlify/Cloudflare: see `public/_headers` (enables CSP and camera permission policy)
 
-This launches the Vite development server and automatically opens the game in your default browser.
+**Tech Stack**
+- Phaser `3.70.x`, TypeScript `5.x`, Vite `5.x`
+- TensorFlow.js face landmarks (`@tensorflow-models/face-landmarks-detection`, `@tensorflow/tfjs-*`) for head tracking
 
-### Build for Production
+**Privacy & Notes**
+- Camera frames are processed locally in the browser; no telemetry is sent
+- Requires a modern browser with WebGL. Chrome/Edge recommended
 
-```bash
-npm run build
-```
-
-### Preview Production Build
-
-```bash
-npm run preview
-```
-
-## Project Structure
-
-```
-HeadPong/
-├── index.html
-├── package.json
-├── src/
-│   ├── game/
-│   │   ├── config/
-│   │   ├── objects/
-│   │   └── scenes/
-│   ├── input/
-│   ├── styles/
-│   └── main.ts
-└── tsconfig.json
-```
-
-- `src/game`: Phaser scenes and game objects.
-- `src/input`: Input adapters, including the TensorFlow.js-based head tracker.
-- `src/styles`: Global styles applied to the host page.
-
-## Controls
-
-- Keep your head centered in front of the webcam to steer the paddle horizontally.
-- When head tracking is unavailable, move the paddle with the mouse or touch input.
-- After a win or loss, press <kbd>Space</kbd> (or tap/click) to quickly restart the round.
-
-### Default: Keyboard Input
-
-- By default, the game uses keyboard control for the “head”.
-- Use <kbd>Left</kbd>/<kbd>Right</kbd> arrows or <kbd>A</kbd>/<kbd>D</kbd> to move.
-- When idle, the “head” gently wanders to simulate minor movement.
-
-### Camera Mode (Optional)
-
-- Opt into camera control by appending `?input=camera` to the URL, for example:
-  - `http://localhost:5173/?input=camera`
-- When prompted, allow camera access.
-
-## Head Tracking
-
-The `HeadTracker` class uses TensorFlow.js with the `@tensorflow-models/face-landmarks-detection` (MediaPipe FaceMesh) detector to deliver normalized head position updates to the game. Camera mode is opt-in via `?input=camera`. When head tracking is unavailable (no webcam or permissions denied), the game gracefully falls back to mouse/touch input for paddle control.
-
-### Camera Privacy
-
-- Camera use is opt-in via `?input=camera`.
-- All processing runs locally in your browser; nothing is uploaded.
-- Click the `Stop Camera` button in the left panel to immediately turn the camera off and switch to keyboard/mouse control.
-
-### Troubleshooting installs (corporate networks / proxies)
-
-- Ensure npm registry uses HTTPS:
-
-  ```powershell
-  npm config set registry https://registry.npmjs.org/
-  npm config set strict-ssl true
-  ```
-
-- If you are behind a proxy, configure it (replace with your proxy):
-
-  ```powershell
-  npm config set proxy http://username:password@proxy.company.com:8080
-  npm config set https-proxy http://username:password@proxy.company.com:8080
-  ```
-
-- Increase fetch timeouts if needed:
-
-  ```powershell
-  npm config set fetch-timeout 120000
-  npm config set fetch-retry-maxtimeout 120000
-  ```
-
-## License
-
-## Scoring
-
-- Each brick awards points based on its row difficulty: bricks near the top are worth more, and lower rows are worth less.
-- Minimum brick value is 50 points; top rows scale up to 150 points.
-
-This project is provided as part of a guided coding session and does not currently include a specific license.
