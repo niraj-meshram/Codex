@@ -81,6 +81,12 @@ HeadPong/
 
 The `HeadTracker` class uses TensorFlow.js with the `@tensorflow-models/face-landmarks-detection` (MediaPipe FaceMesh) detector to deliver normalized head position updates to the game. Camera mode is opt-in via `?input=camera`. When head tracking is unavailable (no webcam or permissions denied), the game gracefully falls back to mouse/touch input for paddle control.
 
+### Camera Privacy
+
+- Camera use is opt-in via `?input=camera`.
+- All processing runs locally in your browser; nothing is uploaded.
+- Click the `Stop Camera` button in the left panel to immediately turn the camera off and switch to keyboard/mouse control.
+
 ### Troubleshooting installs (corporate networks / proxies)
 
 - Ensure npm registry uses HTTPS:
@@ -105,5 +111,10 @@ The `HeadTracker` class uses TensorFlow.js with the `@tensorflow-models/face-lan
   ```
 
 ## License
+
+## Scoring
+
+- Each brick awards points based on its row difficulty: bricks near the top are worth more, and lower rows are worth less.
+- Minimum brick value is 50 points; top rows scale up to 150 points.
 
 This project is provided as part of a guided coding session and does not currently include a specific license.

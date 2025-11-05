@@ -1,0 +1,5 @@
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' blob: data:; font-src 'self' data:; worker-src 'self' blob:; media-src 'self' blob: data:; frame-ancestors 'none'
+  Permissions-Policy: camera=(self)
+  Referrer-Policy: no-referrer
+  X-Frame-Options: DENY

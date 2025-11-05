@@ -10,14 +10,14 @@
     "preview": "node ./node_modules/vite/bin/vite.js preview"
   },
   "dependencies": {
-    "vite": "^5.1.4",
-    "@tensorflow-models/face-landmarks-detection": "^1.0.3",
-    "@tensorflow/tfjs-backend-webgl": "^4.20.0",
-    "@tensorflow/tfjs-converter": "^4.20.0",
-    "@tensorflow/tfjs-core": "^4.20.0",
-    "phaser": "^3.70.0"
+    "vite": "5.1.4",
+    "@tensorflow-models/face-landmarks-detection": "1.0.3",
+    "@tensorflow/tfjs-backend-webgl": "4.20.0",
+    "@tensorflow/tfjs-converter": "4.20.0",
+    "@tensorflow/tfjs-core": "4.20.0",
+    "phaser": "3.70.0"
   },
   "devDependencies": {
-    "typescript": "^5.3.3"
+    "typescript": "5.3.3"
   }
 }

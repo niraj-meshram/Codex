@@ -8,7 +8,7 @@ const BALL_SPEED = 360;
 const PADDLE_WIDTH = 160;
 const PADDLE_HEIGHT = 24;
 const PADDLE_Y_OFFSET = 60;
-const SCORE_PER_BRICK = 50;
+const MIN_BRICK_SCORE = 50;
 
 interface GameState {
   score: number;
@@ -32,6 +32,11 @@ export class GameScene extends Phaser.Scene {
   private playfieldBorder?: Phaser.GameObjects.Graphics;
   private bgGraphics?: Phaser.GameObjects.Graphics;
   private frameCount = 0;
+  private paddleWidth = PADDLE_WIDTH;
+  private powerUpActive = false;
+  private powerUpTimer?: Phaser.Time.TimerEvent;
+  private powerUpTween?: Phaser.Tweens.Tween;
+  private cameraActive = false;
   private state: GameState = {
     score: 0,
     lives: 1,
@@ -84,15 +89,18 @@ export class GameScene extends Phaser.Scene {
     this.events.on('start-game', this.startGame, this);
     this.events.on('restart-game', this.restartGame, this);
     this.events.on('end-game', this.endGame, this);
+    this.events.on('stop-camera', this.stopCamera, this);
     this.scale.on('resize', this.handleResize, this);
   }
 
   update(): void {
+    // Always allow paddle to move with head/keyboard before the game starts
+    this.updatePaddlePosition();
+
     if (!this.state.isRunning) {
       return;
     }
 
-    this.updatePaddlePosition();
     this.constrainBall();
 
     // Spawn a small trail dot behind the ball every few frames
@@ -143,6 +151,10 @@ export class GameScene extends Phaser.Scene {
         this.events.emit('notification', 'Head tracking unavailable. Use mouse or touch to play.');
       }
     });
+
+    // Emit initial camera state after attempting to start
+    this.cameraActive = !this.usingKeyboardInput();
+    this.events.emit('camera-state', { active: this.cameraActive });
   }
 
   private spawnTrailDot(x: number, y: number): void {
@@ -262,7 +274,7 @@ export class GameScene extends Phaser.Scene {
     const normPaddle = Phaser.Math.Clamp((this.paddle?.x || 0) / (prevPlayWidth || 1), 0.05, 0.95);
     const newPaddleX = normPaddle * this.playWidth;
     if (this.paddle) {
-      const halfW = PADDLE_WIDTH / 2;
+      const halfW = this.paddleWidth / 2;
       this.paddle.body.x = newPaddleX - halfW;
       this.paddle.x = newPaddleX;
     }
@@ -273,10 +285,11 @@ export class GameScene extends Phaser.Scene {
   };
 
   private createPaddle(): void {
+    this.paddleWidth = PADDLE_WIDTH;
     const paddle = this.add.rectangle(
       this.playWidth / 2,
       this.playHeight - PADDLE_Y_OFFSET,
-      PADDLE_WIDTH,
+      this.paddleWidth,
       PADDLE_HEIGHT,
       0x38bdf8
     );
@@ -306,12 +319,14 @@ export class GameScene extends Phaser.Scene {
   }
 
   private updatePaddlePosition(): void {
+    const halfWidth = this.paddleWidth / 2;
+    const minNorm = Math.max(0, halfWidth / this.playWidth);
+    const maxNorm = Math.min(1, 1 - halfWidth / this.playWidth);
     const currentX = this.paddle.x / this.playWidth;
-    const nextX = Phaser.Math.Linear(currentX, this.targetNormalizedX, this.smoothingFactor);
-    const clampedX = Phaser.Math.Clamp(nextX, 0.05, 0.95);
+    const nextX = Phaser.Math.Linear(currentX, Phaser.Math.Clamp(this.targetNormalizedX, 0, 1), this.smoothingFactor);
+    const clampedX = Phaser.Math.Clamp(nextX, minNorm, maxNorm);
     const absoluteX = clampedX * this.playWidth;
     // For dynamic bodies, move via body position (top-left) and mirror to display
-    const halfWidth = PADDLE_WIDTH / 2;
     this.paddle.body.x = absoluteX - halfWidth;
     this.paddle.x = absoluteX;
   }
@@ -345,6 +360,7 @@ export class GameScene extends Phaser.Scene {
         ? 'Keyboard mode: Use Left/Right or A/D to steer.'
         : 'Align your head within the camera view to control the paddle.'
     );
+    this.deactivatePaddlePowerUp();
     this.resetBallAndPaddle();
     // Stay paused until Start is clicked
     this.physics.pause();
@@ -356,7 +372,7 @@ export class GameScene extends Phaser.Scene {
     const paddleBody = (paddle as Phaser.GameObjects.Rectangle).body as Phaser.Physics.Arcade.Body;
 
     const relativeIntersect = (ballBody.x + ballBody.halfWidth) - (paddleBody.x + paddleBody.halfWidth);
-    const normalized = Phaser.Math.Clamp(relativeIntersect / (PADDLE_WIDTH / 2), -1, 1);
+    const normalized = Phaser.Math.Clamp(relativeIntersect / (this.paddleWidth / 2), -1, 1);
     const bounceAngle = normalized * Phaser.Math.DegToRad(60);
     const speed = BALL_SPEED;
 
@@ -375,15 +391,24 @@ export class GameScene extends Phaser.Scene {
     if (brickRectangle.body) {
       brickRectangle.body.destroy();
     }
+    // Add score based on brick's assigned difficulty
+    const brickScore: number = (brick as any).getData?.('score') ?? MIN_BRICK_SCORE;
+    const isPower: boolean = !!(brick as any).getData?.('power');
     brickRectangle.destroy();
-    this.state.score += SCORE_PER_BRICK;
+    this.state.score += brickScore;
     this.state.bricksRemaining -= 1;
     this.events.emit('score-changed', this.state.score);
+    // Audio: brick break pop
+    this.playSound('brick');
 
     // Impact burst at brick position
     const bx = (brick as any).x ?? this.ball.x;
     const by = (brick as any).y ?? this.ball.y;
     this.impactBurst(bx, by);
+
+    if (isPower) {
+      this.activatePaddlePowerUp();
+    }
 
     if (this.state.bricksRemaining <= 0) {
       this.ball.body.velocity.y = -Math.abs(this.ball.body.velocity.y);
@@ -420,6 +445,8 @@ export class GameScene extends Phaser.Scene {
     this.state.isRunning = false;
     this.physics.pause();
     this.ball.body.setVelocity(0, 0);
+    // Audio: lose sting
+    this.playSound('lose');
     this.events.emit('game-over', { score: this.state.score });
     this.events.emit('notification', '');
   }
@@ -428,7 +455,120 @@ export class GameScene extends Phaser.Scene {
     this.state.isRunning = false;
     this.physics.pause();
     this.ball.body.setVelocity(0, 0);
+    // Audio: win arpeggio
+    this.playSound('win');
     this.events.emit('game-win', { score: this.state.score });
     this.events.emit('notification', '');
   }
+
+  private setPaddleWidth(width: number): void {
+    this.paddleWidth = Math.max(20, Math.floor(width));
+    this.paddle.width = this.paddleWidth;
+    this.paddle.displayWidth = this.paddleWidth;
+    this.paddle.body.setSize(this.paddleWidth, PADDLE_HEIGHT, true);
+    this.paddle.body.updateFromGameObject();
+  }
+
+  private activatePaddlePowerUp(): void {
+    if (this.powerUpActive) return;
+    this.powerUpActive = true;
+    // Enlarge to 1.5x
+    this.setPaddleWidth(PADDLE_WIDTH * 1.5);
+    // Flashing effect on paddle
+    this.powerUpTween?.stop();
+    this.paddle.setAlpha(1);
+    this.powerUpTween = this.tweens.add({
+      targets: this.paddle,
+      alpha: 0.4,
+      duration: 120,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut'
+    });
+    // Victory sound on activation
+    this.playSound('win');
+    // Timer to revert after 15 seconds
+    this.powerUpTimer?.remove(false);
+    this.powerUpTimer = this.time.addEvent({ delay: 15000, callback: this.deactivatePaddlePowerUp, callbackScope: this });
+  }
+
+  private deactivatePaddlePowerUp = (): void => {
+    if (!this.powerUpActive) return;
+    this.powerUpActive = false;
+    this.powerUpTimer?.remove(false);
+    this.powerUpTimer = undefined;
+    if (this.powerUpTween) {
+      this.powerUpTween.stop();
+      this.powerUpTween = undefined;
+    }
+    this.paddle.setAlpha(1);
+    this.setPaddleWidth(PADDLE_WIDTH);
+  };
+
+  // --- Lightweight procedural sound (no assets) ---
+  private canPlayAudio(): boolean {
+    const sm: any = this.sound as any;
+    return !!(this.sound && sm && sm.context && !this.sound.locked);
+  }
+
+  private scheduleBeep(opts: { freq: number; duration: number; when: number; type?: OscillatorType; volume?: number }): void {
+    const sm: any = this.sound as any;
+    const ctx: any = sm.context;
+    if (!ctx) return;
+    const now: number = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = opts.type || 'sine';
+    osc.frequency.setValueAtTime(opts.freq, now + opts.when);
+    const vol = Math.max(0, Math.min(1, opts.volume ?? 0.05));
+    gain.gain.setValueAtTime(vol, now + opts.when);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + opts.when + opts.duration / 1000);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now + opts.when);
+    osc.stop(now + opts.when + opts.duration / 1000 + 0.02);
+    osc.onended = () => {
+      try {
+        osc.disconnect();
+        gain.disconnect();
+      } catch {
+        /* noop */
+      }
+    };
+  }
+
+  private playSound(kind: 'brick' | 'lose' | 'win'): void {
+    if (!this.canPlayAudio()) return;
+    const vol = 0.06;
+    if (kind === 'brick') {
+      this.scheduleBeep({ freq: 520, duration: 60, when: 0, type: 'square', volume: vol * 0.8 });
+      return;
+    }
+    if (kind === 'lose') {
+      this.scheduleBeep({ freq: 330, duration: 180, when: 0.0, type: 'sine', volume: vol });
+      this.scheduleBeep({ freq: 220, duration: 260, when: 0.18, type: 'sine', volume: vol * 0.9 });
+      return;
+    }
+    if (kind === 'win') {
+      this.scheduleBeep({ freq: 440, duration: 140, when: 0.0, type: 'triangle', volume: vol });
+      this.scheduleBeep({ freq: 660, duration: 140, when: 0.15, type: 'triangle', volume: vol });
+      this.scheduleBeep({ freq: 880, duration: 200, when: 0.32, type: 'triangle', volume: vol });
+    }
+  }
+
+  private stopCamera = (): void => {
+    if (this.usingKeyboardInput()) {
+      return;
+    }
+    try {
+      this.headInput?.stop?.();
+      this.headInput?.destroy?.();
+    } catch {
+      // ignore
+    }
+    this.headInput = new KeyboardHead({ wander: true });
+    this.cameraActive = false;
+    this.events.emit('camera-state', { active: false });
+    this.events.emit('notification', 'Camera off. Keyboard/mouse control.');
+  };
 }

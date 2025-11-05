@@ -15,6 +15,7 @@ export class BrickWall {
   public readonly brickCount: number = BRICK_ROWS * BRICK_COLUMNS;
   private playWidth: number;
   private playHeight: number;
+  private powerBrick?: Phaser.GameObjects.Rectangle;
 
   constructor(scene: Phaser.Scene, playWidth: number, playHeight: number) {
     this.scene = scene;
@@ -63,6 +64,11 @@ export class BrickWall {
     const startX = sideMargin + (availableWidth - wallWidth) / 2 + effWidth / 2;
     const startY = WALL_TOP_OFFSET + effHeight / 2;
 
+    // Score scaling per row: top row hardest => highest score
+    const MIN_SCORE = 50;
+    const MAX_SCORE = 150;
+    const step = BRICK_ROWS > 1 ? (MAX_SCORE - MIN_SCORE) / (BRICK_ROWS - 1) : 0;
+
     for (let row = 0; row < BRICK_ROWS; row += 1) {
       for (let col = 0; col < BRICK_COLUMNS; col += 1) {
         const x = startX + col * (effWidth + BRICK_PADDING);
@@ -70,6 +76,10 @@ export class BrickWall {
         const color = Phaser.Display.Color.GetColor(59 + row * 30, 130 + col * 4, 246 - row * 20);
 
         const brick = this.scene.add.rectangle(x, y, effWidth, effHeight, color, 1);
+        // Assign score based on row difficulty (top rows yield more points)
+        const rawScore = Math.round(MAX_SCORE - step * row);
+        const score = Math.max(MIN_SCORE, rawScore);
+        (brick as any).setData?.('score', score);
         this.scene.physics.add.existing(brick, true);
         this.group.add(brick);
         // Animate bricks in for a modern feel
@@ -82,6 +92,17 @@ export class BrickWall {
           ease: 'Sine.easeOut'
         });
       }
+    }
+
+    // Pick a random brick to be the power brick
+    const bricks = this.group.getChildren() as Phaser.GameObjects.Rectangle[];
+    if (bricks.length > 0) {
+      const idx = Math.floor(Math.random() * bricks.length);
+      const pb = bricks[idx];
+      this.powerBrick = pb;
+      (pb as any).setData?.('power', true);
+      // Tint power brick by recreating with a distinctive color overlay
+      pb.fillColor = Phaser.Display.Color.GetColor(255, 208, 0); // gold
     }
   }
 }

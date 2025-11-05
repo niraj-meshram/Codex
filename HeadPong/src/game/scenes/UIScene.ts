@@ -30,6 +30,8 @@ export class UIScene extends Phaser.Scene {
   private controlsHelp?: Phaser.GameObjects.Text;
   private panelSeparator?: Phaser.GameObjects.Graphics;
   private panelDivider?: Phaser.GameObjects.Graphics;
+  private cameraStatusText?: Phaser.GameObjects.Text;
+  private stopCameraButton?: Phaser.GameObjects.Text;
 
   constructor() {
     super('UIScene');
@@ -58,6 +60,7 @@ export class UIScene extends Phaser.Scene {
     this.gameScene.events.on('game-started', this.onGameStarted, this);
     this.gameScene.events.on('game-ended', this.onGameEnded, this);
     this.gameScene.events.on('game-win', this.showWin, this);
+    this.gameScene.events.on('camera-state', this.onCameraState, this);
 
     this.createPanelAndControls();
     // Prevent panel objects from drawing on the full overlay camera
@@ -85,6 +88,7 @@ export class UIScene extends Phaser.Scene {
       this.gameScene?.events.off('game-started', this.onGameStarted, this);
       this.gameScene?.events.off('game-ended', this.onGameEnded, this);
       this.gameScene?.events.off('game-win', this.showWin, this);
+      this.gameScene?.events.off('camera-state', this.onCameraState, this);
       this.input.keyboard?.off('keydown-A');
     });
   }
@@ -185,13 +189,33 @@ export class UIScene extends Phaser.Scene {
     this.controlsHelp.setDepth(10);
     this.panelObjects.push(this.controlsHelp);
 
+    // Camera status and control
+    const camY = sepY + 80;
+    this.cameraStatusText = this.add.text(panelWidth / 2, camY, 'Camera: Off', {
+      fontFamily: t.fontFamily,
+      fontSize: '12px',
+      color: t.textSecondary,
+      align: 'center'
+    }).setOrigin(0.5, 0);
+    this.cameraStatusText.setDepth(10).setVisible(false);
+    this.panelObjects.push(this.cameraStatusText);
+
+    this.stopCameraButton = this.add
+      .text(panelWidth / 2, camY + 24, 'Stop Camera', buttonStyle)
+      .setPadding(8, 6)
+      .setOrigin(0.5, 0)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => this.gameScene?.events.emit('stop-camera'));
+    this.stopCameraButton.setDepth(10).setVisible(false);
+    this.panelObjects.push(this.stopCameraButton);
+
     // Vertical divider line at the right edge of the score panel (into the gutter)
     this.panelDivider = this.add.graphics();
     this.panelDivider.lineStyle(2, getTheme().panelBorder, 1);
     this.panelDivider.beginPath();
     const lineX = panelWidth - 2; // stay within panel camera bounds
     this.panelDivider.moveTo(lineX, 0);
-    this.panelDivider.lineTo(lineX, WORLD_BOUNDS.height);
+    this.panelDivider.lineTo(lineX, this.panelCam!.height);
     this.panelDivider.strokePath();
     this.panelDivider.setDepth(9);
     this.panelObjects.push(this.panelDivider);
@@ -230,6 +254,7 @@ export class UIScene extends Phaser.Scene {
     this.notificationText = undefined;
     this.clearGameOver();
 
+    const t = getTheme();
     const ov = this.overlayCam!;
     const cx = ov.scrollX + ov.width / 2;
     const cy = ov.scrollY + ov.height / 2;
@@ -247,6 +272,15 @@ export class UIScene extends Phaser.Scene {
       color: t.textPrimary,
       align: 'center'
     }).setOrigin(0.5);
+
+    // Ensure overlay text stays within playfield (overlay camera) bounds
+    const maxOverlayWidth = Math.max(1, ov.width - 32);
+    if (this.gameOverTitle.width > maxOverlayWidth) {
+      this.gameOverTitle.setScale(maxOverlayWidth / this.gameOverTitle.width);
+    }
+    if (this.gameOverScore.width > maxOverlayWidth) {
+      this.gameOverScore.setScale(Math.min(1, maxOverlayWidth / this.gameOverScore.width));
+    }
 
     this.gameOverTitle.setDepth(30);
     this.gameOverScore.setDepth(30);
@@ -270,6 +304,7 @@ export class UIScene extends Phaser.Scene {
     this.notificationText = undefined;
     this.clearGameOver();
 
+    const t = getTheme();
     const ov = this.overlayCam!;
     const cx = ov.scrollX + ov.width / 2;
     const cy = ov.scrollY + ov.height / 2;
@@ -287,6 +322,15 @@ export class UIScene extends Phaser.Scene {
       color: t.textPrimary,
       align: 'center'
     }).setOrigin(0.5);
+
+    // Fit overlay text within playfield width
+    const maxOverlayWidth2 = Math.max(1, ov.width - 32);
+    if (this.gameOverTitle.width > maxOverlayWidth2) {
+      this.gameOverTitle.setScale(maxOverlayWidth2 / this.gameOverTitle.width);
+    }
+    if (this.gameOverScore.width > maxOverlayWidth2) {
+      this.gameOverScore.setScale(Math.min(1, maxOverlayWidth2 / this.gameOverScore.width));
+    }
 
     this.gameOverTitle.setDepth(30);
     this.gameOverScore.setDepth(30);
@@ -320,6 +364,15 @@ export class UIScene extends Phaser.Scene {
     this.restartButton?.setVisible(played);
     this.endButton?.setVisible(played);
   }
+
+  private onCameraState = ({ active }: { active: boolean }): void => {
+    if (!this.cameraStatusText || !this.stopCameraButton) return;
+    const t = getTheme();
+    this.cameraStatusText.setText(active ? 'Camera: On' : 'Camera: Off');
+    this.cameraStatusText.setColor(active ? t.textPrimary : t.textSecondary);
+    this.cameraStatusText.setVisible(true);
+    this.stopCameraButton.setVisible(active);
+  };
 
   private createScoreText(initialScore: number): void {
     this.scoreText = this.add.text(16, 16, `Score: ${initialScore}`, {
