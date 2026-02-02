@@ -1,0 +1,150 @@
+nameOverride: ""
+fullnameOverride: ""
+
+license: "accept"
+
+image:
+  repository: ibmcom/mq
+  tag: "9.2.4.0-r1"
+  pullPolicy: IfNotPresent
+  pullSecret: ""
+  disableDefaultPullSecret: false
+
+metadata:
+  labels: {}
+  annotations: {}
+
+serviceAccount:
+  create: true
+  name: ""
+
+queueManager:
+  name: "QM1"
+  updateStrategy: RollingUpdate
+  terminationGracePeriodSeconds: 30
+  envVariables: []
+  mqscConfigMaps: []
+  qminiConfigMaps: []
+  mqscSecrets: []
+  qminiSecrets: []
+  nativeha:
+    enable: false
+    nativehaGroup: ""
+    nativehaGroups: []
+    tls: {}
+  multiinstance:
+    enable: false
+
+persistence:
+  dataPVC:
+    enable: true
+    name: mq-data
+    size: 2Gi
+    storageClassName: ""
+  logPVC:
+    enable: true
+    name: mq-log
+    size: 2Gi
+    storageClassName: ""
+  qmPVC:
+    enable: true
+    name: mq-qm
+    size: 2Gi
+    storageClassName: ""
+
+metrics:
+  enabled: false
+
+log:
+  format: "basic"
+  debug: false
+
+trace:
+  strmqm: false
+  crtmqdir: false
+  crtmqm: false
+
+web:
+  enable: true
+  manualConfig:
+    configMap:
+      name: ""
+    secret:
+      name: ""
+
+route:
+  nodePort:
+    mqtraffic: false
+    webconsole: false
+    hacrrtraffic: false
+  loadBalancer:
+    mqtraffic: false
+    webconsole: false
+    hacrrtraffic: false
+    annotations: {}
+    loadBalancerSourceRanges: []
+  ingress:
+    annotations: {}
+    webconsole:
+      enable: false
+      hostname: ""
+      path: ""
+      tls:
+        enable: false
+        secret: ""
+  openShiftRoute:
+    mqtraffic: false
+    webconsole: false
+    hacrrtraffic: false
+
+pki:
+  trust: []
+  keys: []
+
+credentials:
+  enable: false
+  secret: ""
+
+security:
+  context:
+    fsGroup: 0
+    seccompProfile:
+      type: ""
+    supplementalGroups: []
+  readOnlyRootFilesystem: false
+  initVolumeAsRoot: false
+  runAsUser: 1001
+
+affinity:
+  nodeAffinity:
+    matchExpressions: []
+
+tolerations: []
+
+topologySpreadConstraints: []
+
+resources:
+  limits:
+    cpu: "1"
+    memory: "1Gi"
+  requests:
+    cpu: "250m"
+    memory: "512Mi"
+
+livenessProbe:
+  initialDelaySeconds: 90
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 6
+
+readinessProbe:
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 6
+
+startupProbe:
+  periodSeconds: 10
+  timeoutSeconds: 5
+  successThreshold: 1
+  failureThreshold: 30
