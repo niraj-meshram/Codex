@@ -45,7 +45,6 @@ class SentenceQuestion(BaseModel):
     prompt: str
     response_template: list[str]
     tokens: list[str]
-    answer: str
 
 
 class SentenceSetResponse(BaseModel):

@@ -35,7 +35,7 @@ export type HistoryItem = {
   prompt_id: string;
   task_type: string;
   user_text: string;
-  scores_json: SubmitResult;
+  scores_json: SubmitResult | SentenceSubmitResult | Record<string, unknown>;
   created_at: string;
 };
 
@@ -44,7 +44,6 @@ export type SentenceQuestion = {
   prompt: string;
   response_template: string[];
   tokens: string[];
-  answer: string;
 };
 
 export type SentenceSet = {

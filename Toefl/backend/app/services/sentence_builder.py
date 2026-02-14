@@ -4,6 +4,7 @@ import os
 import json
 import urllib.request
 import re
+from collections import deque
 from typing import Any
 
 QUESTION_BANK = [
@@ -106,6 +107,10 @@ QUESTION_BANK = [
 ]
 
 _runtime_sets: dict[str, dict[str, Any]] = {}
+_used_question_keys: set[str] = set()
+_used_question_order: deque[str] = deque()
+_MAX_USED_QUESTION_MEMORY = 300
+_last_llm_error: str | None = None
 DECOY_WORDS = ["already", "usually", "probably", "around", "earlier", "today", "quickly", "carefully", "really", "maybe", "still", "just"]
 
 
@@ -157,6 +162,42 @@ def _words_from_template(answer: str, template: list[str]) -> list[str]:
     return hidden
 
 
+def _rebuild_from_template(template: list[str], hidden_words: list[str]) -> str:
+    parts: list[str] = []
+    hi = 0
+    for t in template:
+        if t == "__":
+            if hi >= len(hidden_words):
+                return ""
+            parts.append(hidden_words[hi])
+            hi += 1
+        else:
+            parts.append(t)
+    if hi != len(hidden_words):
+        return ""
+    return " ".join(parts).replace(" ,", ",").replace(" .", ".").replace(" ?", "?").replace(" !", "!")
+
+
+def _normalize_sentence(text: str) -> str:
+    return " ".join(_tokenize(text.lower()))
+
+
+def _question_key(prompt: str, answer: str) -> str:
+    return _normalize_sentence(prompt)
+
+
+def _coerce_valid_template(answer: str, template: list[str] | None) -> tuple[list[str], list[str]]:
+    if template and isinstance(template, list):
+        cleaned = [str(x).strip() for x in template if str(x).strip()]
+        blank_count = cleaned.count("__")
+        if blank_count >= 3:
+            hidden = _words_from_template(answer, cleaned)
+            rebuilt = _rebuild_from_template(cleaned, hidden)
+            if len(hidden) == blank_count and rebuilt and _normalize_sentence(rebuilt) == _normalize_sentence(answer):
+                return cleaned, hidden
+    return _build_template(answer)
+
+
 def _extract_json(text: str) -> list[dict[str, Any]]:
     text = text.strip()
     if text.startswith("```"):
@@ -188,11 +229,19 @@ def _extract_json(text: str) -> list[dict[str, Any]]:
     return clean
 
 
-def _generate_with_llm(count: int) -> list[dict[str, str]]:
+def _generate_with_llm(count: int, avoid_prompts: list[str] | None = None) -> list[dict[str, str]]:
+    global _last_llm_error
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
+        _last_llm_error = "OPENAI_API_KEY is not set."
         return []
-    model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+    primary_model = os.getenv("OPENAI_MODEL", "gpt-5")
+    model_candidates = [primary_model, "gpt-4o-mini"]
+    avoid_text = ""
+    if avoid_prompts:
+        sample = "; ".join(avoid_prompts[:30])
+        avoid_text = f" Do not reuse or paraphrase these prompt stems: {sample}."
+
     instruction = (
         f"Generate {count} TOEFL Build-a-Sentence items in this exact format. "
         "Return ONLY a JSON array. Each object must have keys: prompt, response_template, answer. "
@@ -200,42 +249,59 @@ def _generate_with_llm(count: int) -> list[dict[str, str]]:
         "response_template: token list where some tokens are fixed words and missing words are '__'. "
         "answer: full grammatical response sentence that matches the template. "
         "Pattern must look like dialogue continuation items, not abstract grammar tasks. Include some items where prompt is a statement and response_template is a follow-up question ending with '?'."
+        + avoid_text
     )
-    payload = {
-        "model": model,
-        "temperature": 0.5,
-        "messages": [
-            {"role": "system", "content": "You create TOEFL sentence-building items."},
-            {"role": "user", "content": instruction},
-        ],
-    }
-    req = urllib.request.Request(
-        "https://api.openai.com/v1/chat/completions",
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {api_key}",
-        },
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=20) as resp:
-            body = json.loads(resp.read().decode("utf-8"))
-        content = body["choices"][0]["message"]["content"]
-    except Exception:
+    content = ""
+    last_exc: Exception | None = None
+    for model in model_candidates:
+        payload = {
+            "model": model,
+            "temperature": 0.9,
+            "messages": [
+                {"role": "system", "content": "You create TOEFL sentence-building items."},
+                {"role": "user", "content": instruction},
+            ],
+        }
+        req = urllib.request.Request(
+            "https://api.openai.com/v1/chat/completions",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {api_key}",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=40) as resp:
+                body = json.loads(resp.read().decode("utf-8"))
+            content = body["choices"][0]["message"]["content"]
+            _last_llm_error = None
+            break
+        except Exception as exc:
+            last_exc = exc
+            continue
+
+    if not content:
+        _last_llm_error = str(last_exc) if last_exc else "Unknown OpenAI request failure."
         return []
     rows = _extract_json(content)
     valid: list[dict[str, Any]] = []
+    seen: set[str] = set()
     for r in rows:
         prompt = (r.get("prompt") or "").strip()
         answer = (r.get("answer") or "").strip()
         template = r.get("response_template")
         if not prompt or not answer:
             continue
+        key = _normalize_sentence(prompt)
+        if key in seen:
+            continue
+        seen.add(key)
         if isinstance(template, list) and template.count("__") >= 3:
             valid.append({"prompt": prompt, "answer": answer, "response_template": template})
         else:
             valid.append({"prompt": prompt, "answer": answer})
+    random.shuffle(valid)
     return valid
 
 
@@ -261,38 +327,47 @@ def _apply_difficulty_options(options: list[str], blank_count: int, difficulty: 
 
 
 def generate_sentence_set(count: int = 10, difficulty: str = "hard") -> dict[str, Any]:
-    generated = _generate_with_llm(count)
-    if len(generated) >= count:
-        picks = generated[:count]
-    else:
-        required_patterns = [
-            "question_to_statement_dot_mixed",
-            "question_to_statement_dot_blanks",
-            "statement_to_question_qmark",
-            "statement_to_exclamation_bang",
-            "question_to_exclamation_bang",
-        ]
-        picks = []
-        for pat in required_patterns:
-            cand = [q for q in QUESTION_BANK if q.get("pattern") == pat]
-            if cand:
-                picks.append(random.choice(cand))
-        remaining_pool = [q for q in QUESTION_BANK if q not in picks]
-        random.shuffle(remaining_pool)
-        need = max(0, min(count, len(QUESTION_BANK)) - len(picks))
-        picks.extend(remaining_pool[:need])
+    global _used_question_keys
+    fresh: list[dict[str, Any]] = []
+    seen_batch: set[str] = set()
+    for _ in range(8):
+        avoid = list(_used_question_keys.union(seen_batch))
+        generated = _generate_with_llm(max(count * 8, 80), avoid_prompts=avoid)
+        for g in generated:
+            key = _question_key(g["prompt"], g["answer"])
+            if key in _used_question_keys or key in seen_batch:
+                continue
+            seen_batch.add(key)
+            fresh.append(g)
+            if len(fresh) >= count:
+                break
+        if len(fresh) >= count:
+            break
+    if len(fresh) < count:
+        for q in QUESTION_BANK:
+            key = _question_key(q["prompt"], q["answer"])
+            if key in _used_question_keys or key in seen_batch:
+                continue
+            seen_batch.add(key)
+            fresh.append(
+                {
+                    "prompt": q["prompt"],
+                    "answer": q["answer"],
+                    "response_template": q["response_template"],
+                }
+            )
+            if len(fresh) >= count:
+                break
+    if len(fresh) < count:
+        detail = _last_llm_error or "LLM returned insufficient unique items."
+        raise RuntimeError(f"Unable to generate enough non-repeating sentence questions. {detail}")
+    picks = fresh[:count]
     set_id = f"sentence-{uuid.uuid4().hex[:8]}"
     questions = []
     for i, item in enumerate(picks, start=1):
         s = item["answer"]
-        if item.get("response_template"):
-            template = item["response_template"]
-            options = _words_from_template(s, template)
-            random.shuffle(options)
-            if not options:
-                template, options = _build_template(s)
-        else:
-            template, options = _build_template(s)
+        template, options = _coerce_valid_template(s, item.get("response_template"))
+        random.shuffle(options)
 
         blank_count = template.count("__")
         if blank_count <= 0 or len(options) < blank_count:
@@ -315,36 +390,8 @@ def generate_sentence_set(count: int = 10, difficulty: str = "hard") -> dict[str
             }
         )
 
-    def inject_exemplar(slot_index: int, punct: str):
-        exemplar = next((x for x in QUESTION_BANK if x.get("response_template", []) and x["response_template"][-1] == punct), None)
-        if not exemplar:
-            return
-        s = exemplar["answer"]
-        template = exemplar["response_template"]
-        options = _words_from_template(s, template)
-        random.shuffle(options)
-        blank_count = template.count("__")
-        if len(options) < blank_count:
-            words = [w for w in _tokenize(s) if _is_word(w)]
-            while len(options) < blank_count and words:
-                options.append(words[len(options) % len(words)])
-        extra = random.choice([0, 1, 2])
-        qid = f"q{slot_index + 1}"
-        questions[slot_index] = {
-            "question_id": qid,
-            "prompt": exemplar["prompt"],
-            "response_template": template,
-            "tokens": _apply_difficulty_options(options, blank_count, difficulty)[: blank_count + extra],
-            "answer": s,
-        }
-
-    # Guarantee punctuation patterns in each set.
-    if questions and not any(q["response_template"] and q["response_template"][-1] == "?" for q in questions):
-        inject_exemplar(0, "?")
-    if len(questions) > 1 and not any(q["response_template"] and q["response_template"][-1] == "!" for q in questions):
-        inject_exemplar(1, "!")
-    time_minutes = 6 if difficulty in ("normal", "hard") else 5
-    payload = {
+    time_minutes = 6
+    runtime_payload = {
         "set_id": set_id,
         "title": "Build a Sentence",
         "directions": "Move the words in the boxes to create grammatical sentences.",
@@ -352,8 +399,44 @@ def generate_sentence_set(count: int = 10, difficulty: str = "hard") -> dict[str
         "difficulty": difficulty,
         "questions": questions,
     }
+    _runtime_sets[set_id] = runtime_payload
+    for q in questions:
+        _remember_question_key(_question_key(q["prompt"], q["answer"]))
+    public_questions = [
+        {
+            "question_id": q["question_id"],
+            "prompt": q["prompt"],
+            "response_template": q["response_template"],
+            "tokens": q["tokens"],
+        }
+        for q in questions
+    ]
+    return {
+        "set_id": set_id,
+        "title": "Build a Sentence",
+        "directions": "Move the words in the boxes to create grammatical sentences.",
+        "time_minutes": time_minutes,
+        "difficulty": difficulty,
+        "questions": public_questions,
+    }
+
+
+def get_runtime_set(set_id: str) -> dict[str, Any] | None:
+    return _runtime_sets.get(set_id)
+
+
+def register_runtime_set(set_id: str, payload: dict[str, Any]) -> None:
     _runtime_sets[set_id] = payload
-    return payload
+
+
+def _remember_question_key(key: str) -> None:
+    if key in _used_question_keys:
+        return
+    _used_question_keys.add(key)
+    _used_question_order.append(key)
+    if len(_used_question_order) > _MAX_USED_QUESTION_MEMORY:
+        evicted = _used_question_order.popleft()
+        _used_question_keys.discard(evicted)
 
 
 def grade_sentence_set(set_id: str, answers: dict[str, str]) -> dict[str, Any] | None:

@@ -9,6 +9,8 @@
 2. Backend (`backend/app/`)
 - FastAPI endpoints for prompt retrieval, submission grading, sentence tasks, and history.
 - SQLite persistence through SQLAlchemy.
+- Sentence generation uses OpenAI chat completions (`OPENAI_API_KEY` required).
+- Default model is `gpt-5` with fallback to `gpt-4o-mini`.
 
 3. Prompt Data (`data/prompts/`)
 - `prompts.json` stores parsed prompt bank.
@@ -26,6 +28,7 @@
 4. Backend grades response and stores result in SQLite.
 5. History endpoint returns recent submissions.
 6. Sentence mode can optionally call OpenAI if `OPENAI_API_KEY` exists.
+7. Sentence mode enforces non-repeating recent prompts and returns `503` when unique generation is insufficient.
 
 ## API Summary
 
@@ -34,3 +37,9 @@
 - `GET /api/history`
 - `POST /api/sentence/random?count=1..10&difficulty=normal|hard|very_hard`
 - `POST /api/sentence/submit`
+
+## Sentence Generation Guarantees
+
+- Generated sentence sets are LLM-driven.
+- Build-a-Sentence time limit is fixed at 6 minutes for all difficulty levels.
+- Recent prompts are tracked in memory to reduce repeats across sets.

@@ -5,12 +5,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
 from .database import Base, engine, get_db
-from .models import Submission
+from .models import SentenceSetCache, Submission
 from .schemas import HistoryItem, PromptResponse, SubmitRequest, SubmitResponse
 from .schemas import SentenceSetResponse, SentenceSubmitRequest, SentenceSubmitResponse
 from .services.grading import evaluate_submission
 from .services.prompt_store import prompt_store
-from .services.sentence_builder import generate_sentence_set, grade_sentence_set
+from .services.sentence_builder import generate_sentence_set, get_runtime_set, grade_sentence_set, register_runtime_set
 
 app = FastAPI(title="TOEFL Writing Practice API")
 
@@ -78,13 +78,37 @@ def history(db: Session = Depends(get_db)):
 def sentence_random(
     count: int = Query(10, ge=1, le=10),
     difficulty: str = Query("hard", pattern="^(normal|hard|very_hard)$"),
+    db: Session = Depends(get_db),
 ):
-    return generate_sentence_set(count=count, difficulty=difficulty)
+    try:
+        public_set = generate_sentence_set(count=count, difficulty=difficulty)
+        runtime_set = get_runtime_set(public_set["set_id"])
+        if runtime_set:
+            existing = db.query(SentenceSetCache).filter(SentenceSetCache.set_id == public_set["set_id"]).first()
+            payload_json = json.dumps(runtime_set)
+            if existing:
+                existing.payload_json = payload_json
+            else:
+                db.add(SentenceSetCache(set_id=public_set["set_id"], payload_json=payload_json))
+            db.commit()
+        return public_set
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @app.post("/api/sentence/submit", response_model=SentenceSubmitResponse)
 def sentence_submit(payload: SentenceSubmitRequest, db: Session = Depends(get_db)):
     result = grade_sentence_set(payload.set_id, payload.answers)
+    if not result:
+        cached = db.query(SentenceSetCache).filter(SentenceSetCache.set_id == payload.set_id).first()
+        if cached:
+            try:
+                restored = json.loads(cached.payload_json)
+                if isinstance(restored, dict):
+                    register_runtime_set(payload.set_id, restored)
+                    result = grade_sentence_set(payload.set_id, payload.answers)
+            except json.JSONDecodeError:
+                result = None
     if not result:
         raise HTTPException(status_code=404, detail="Sentence set not found. Start a new set.")
 

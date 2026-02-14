@@ -86,7 +86,7 @@ function PracticeSection({ taskType, heading }: { taskType: TaskType; heading: s
       <section className="bg-slate-50 border rounded p-3">
         <div className="flex flex-wrap items-center gap-3">
           <button
-            onClick={startPractice}
+            onClick={() => void startPractice()}
             disabled={loadingPrompt}
             className="bg-accent text-white px-4 py-2 rounded hover:opacity-90 disabled:opacity-50"
           >
@@ -108,7 +108,9 @@ function PracticeSection({ taskType, heading }: { taskType: TaskType; heading: s
           {prompt.task_type === "email" ? (
             <div className="space-y-2">
               <p className="text-slate-800 whitespace-pre-wrap">{buildEmailScenario(prompt.raw_text)}</p>
-              <p className="font-medium">Write an email to the store manager. In your email, do the following:</p>
+              <p className="font-medium">
+                Write an email to {prompt.to_field || "the recipient"}. In your email, do the following:
+              </p>
               <ul className="list-disc pl-5">
                 {prompt.bullet_points.length ? (
                   prompt.bullet_points.map((b, i) => <li key={i}>{b}</li>)
@@ -171,7 +173,7 @@ function PracticeSection({ taskType, heading }: { taskType: TaskType; heading: s
             {prompt.constraints.min_words > 0 ? <div>Minimum required: {prompt.constraints.min_words}</div> : null}
           </div>
           <button
-            onClick={handleSubmit}
+            onClick={() => void handleSubmit()}
             disabled={!text.trim() || submitting}
             className="bg-accent2 text-white px-4 py-2 rounded hover:opacity-90 disabled:opacity-50"
           >
@@ -249,9 +251,11 @@ function SentencePracticeSection() {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [placements, setPlacements] = useState<Record<string, string[]>>({});
   const [result, setResult] = useState<SentenceSubmitResult | null>(null);
+  const [difficultyLevel, setDifficultyLevel] = useState<"easy" | "hard" | "tough">("hard");
   const [secondsLeft, setSecondsLeft] = useState(0);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState("");
+  const [loadingSet, setLoadingSet] = useState(false);
 
   useEffect(() => {
     if (!running || secondsLeft <= 0) return;
@@ -262,18 +266,30 @@ function SentencePracticeSection() {
   async function start() {
     setError("");
     setResult(null);
-    const data = await fetchSentenceSet(10);
-    const seed: Record<string, string> = {};
-    const seedPlacements: Record<string, string[]> = {};
-    data.questions.forEach((q) => {
-      seed[q.question_id] = "";
-      seedPlacements[q.question_id] = Array(q.tokens.length).fill("");
-    });
-    setAnswers(seed);
-    setPlacements(seedPlacements);
-    setSetData(data);
-    setSecondsLeft(data.time_minutes * 60);
-    setRunning(true);
+    setLoadingSet(true);
+    try {
+      const difficultyMap = {
+        easy: "normal",
+        hard: "hard",
+        tough: "very_hard",
+      } as const;
+      const data = await fetchSentenceSet(10, difficultyMap[difficultyLevel]);
+      const seed: Record<string, string> = {};
+      const seedPlacements: Record<string, string[]> = {};
+      data.questions.forEach((q) => {
+        seed[q.question_id] = "";
+        seedPlacements[q.question_id] = Array(q.tokens.length).fill("");
+      });
+      setAnswers(seed);
+      setPlacements(seedPlacements);
+      setSetData(data);
+      setSecondsLeft(data.time_minutes * 60);
+      setRunning(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load sentence set");
+    } finally {
+      setLoadingSet(false);
+    }
   }
 
   function tokenItems(tokens: string[]) {
@@ -339,14 +355,8 @@ function SentencePracticeSection() {
     setPlacements((prev) => {
       const current = [...(prev[questionId] || [])];
       current[slotIndex] = "";
-      const textById = Object.fromEntries(items.map((x) => [x.id, x.text]));
-      const built = current
-        .filter(Boolean)
-        .map((id) => textById[id] || "")
-        .filter(Boolean)
-        .join(" ")
-        .trim();
-      const sentence = built ? `${built}.` : "";
+      const q = setData?.questions.find((qq) => qq.question_id === questionId);
+      const sentence = q ? buildSentenceFromTemplate(q.response_template, current, items) : "";
       setAnswers((a) => ({ ...a, [questionId]: sentence }));
       return { ...prev, [questionId]: current };
     });
@@ -370,13 +380,49 @@ function SentencePracticeSection() {
     <section className="p-6 md:p-8 space-y-6 bg-[#ececec] rounded">
       <div className="text-center space-y-2">
         <h2 className="text-4xl font-semibold">Build a Sentence</h2>
-        <div className="text-lg font-semibold">Timer: {mm}:{ss}</div>
+      </div>
+      <div className="sticky top-2 z-20">
+        <div className="mx-auto w-fit rounded-lg border border-slate-300 bg-white/95 px-4 py-2 text-lg font-semibold shadow-sm backdrop-blur">
+          Timer: {mm}:{ss}
+        </div>
       </div>
       <p className="text-3xl leading-relaxed">
         <span className="font-semibold underline">Directions:</span> Move the words in the boxes to create grammatical sentences. On test day, you will have 6 minutes to complete 10 questions.
       </p>
-      <button onClick={start} className="bg-accent text-white px-4 py-2 rounded hover:opacity-90">
-        Start Build a Sentence
+      <div className="space-y-2">
+        <div className="text-lg font-semibold">Difficulty</div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => setDifficultyLevel("easy")}
+            className={`px-3 py-2 rounded border ${difficultyLevel === "easy" ? "bg-accent text-white border-accent" : "bg-white text-slate-700 border-slate-300"}`}
+          >
+            Easy
+          </button>
+          <button
+            onClick={() => setDifficultyLevel("hard")}
+            className={`px-3 py-2 rounded border ${difficultyLevel === "hard" ? "bg-accent text-white border-accent" : "bg-white text-slate-700 border-slate-300"}`}
+          >
+            Hard
+          </button>
+          <button
+            onClick={() => setDifficultyLevel("tough")}
+            className={`px-3 py-2 rounded border ${difficultyLevel === "tough" ? "bg-accent text-white border-accent" : "bg-white text-slate-700 border-slate-300"}`}
+          >
+            Tough
+          </button>
+        </div>
+        <div className="text-sm text-slate-600">
+          {difficultyLevel === "easy" ? "Easy: simpler sentence options and easier patterns." : null}
+          {difficultyLevel === "hard" ? "Hard: tougher questions with more challenging English." : null}
+          {difficultyLevel === "tough" ? "Tough: very hard questions with difficult English and grammar." : null}
+        </div>
+      </div>
+      <button
+        onClick={() => void start()}
+        disabled={loadingSet}
+        className="bg-accent text-white px-4 py-2 rounded hover:opacity-90 disabled:opacity-50"
+      >
+        {loadingSet ? "Loading..." : "Start Build a Sentence"}
       </button>
       {error ? <div className="text-red-700">{error}</div> : null}
 
@@ -466,7 +512,7 @@ function SentencePracticeSection() {
               <div className="text-sm text-slate-500">Drag words into the blanks. Click a filled blank to remove a word.</div>
             </div>
           ))}
-          <button onClick={submit} className="bg-accent2 text-white px-4 py-2 rounded hover:opacity-90">
+          <button onClick={() => void submit()} className="bg-accent2 text-white px-4 py-2 rounded hover:opacity-90">
             Submit Sentence Set
           </button>
         </div>
