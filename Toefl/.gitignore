@@ -1,0 +1,27 @@
+﻿# Environment and secrets
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+**/.venv/
+
+# Node/Next
+**/node_modules/
+frontend/.next/
+
+# Local data artifacts
+backend/toefl_practice.db
+**/*.sqlite
+
+# Generated vector index
+data/prompts/chroma/
+
+# Logs
+*.log

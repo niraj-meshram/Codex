@@ -1,0 +1,15 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  color: #0f172a;
+  background:
+    radial-gradient(circle at 8% 12%, rgba(15, 118, 110, 0.08), transparent 34%),
+    radial-gradient(circle at 88% 6%, rgba(234, 88, 12, 0.08), transparent 36%),
+    #f7fafc;
+}
+
+.card {
+  @apply rounded-xl bg-white shadow-md border border-slate-200;
+}
