@@ -77,7 +77,7 @@ def history(db: Session = Depends(get_db)):
 @app.post("/api/sentence/random", response_model=SentenceSetResponse)
 def sentence_random(
     count: int = Query(10, ge=1, le=10),
-    difficulty: str = Query("hard", pattern="^(normal|hard|very_hard)$"),
+    difficulty: str = Query("hard", pattern="^(normal|hard|very_hard|extra_tough)$"),
     db: Session = Depends(get_db),
 ):
     try:

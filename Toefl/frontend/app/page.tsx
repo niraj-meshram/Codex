@@ -251,7 +251,8 @@ function SentencePracticeSection() {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [placements, setPlacements] = useState<Record<string, string[]>>({});
   const [result, setResult] = useState<SentenceSubmitResult | null>(null);
-  const [difficultyLevel, setDifficultyLevel] = useState<"easy" | "hard" | "tough">("hard");
+  const [difficultyLevel, setDifficultyLevel] = useState<"easy" | "hard" | "tough" | "extra_tough">("hard");
+  const [questionCount, setQuestionCount] = useState<5 | 10>(10);
   const [secondsLeft, setSecondsLeft] = useState(0);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState("");
@@ -272,8 +273,9 @@ function SentencePracticeSection() {
         easy: "normal",
         hard: "hard",
         tough: "very_hard",
+        extra_tough: "extra_tough",
       } as const;
-      const data = await fetchSentenceSet(10, difficultyMap[difficultyLevel]);
+      const data = await fetchSentenceSet(questionCount, difficultyMap[difficultyLevel]);
       const seed: Record<string, string> = {};
       const seedPlacements: Record<string, string[]> = {};
       data.questions.forEach((q) => {
@@ -337,6 +339,14 @@ function SentencePracticeSection() {
     });
   }
 
+  function placeTokenInNextBlank(questionId: string, tokenId: string, tokens: string[]) {
+    const current = placements[questionId] || [];
+    if (current.includes(tokenId)) return;
+    const nextSlot = current.findIndex((x) => !x);
+    if (nextSlot < 0) return;
+    handleDrop(questionId, nextSlot, tokenId, tokens);
+  }
+
   function returnToOptions(questionId: string, tokenId: string, tokens: string[]) {
     const items = tokenItems(tokens);
     setPlacements((prev) => {
@@ -387,8 +397,25 @@ function SentencePracticeSection() {
         </div>
       </div>
       <p className="text-3xl leading-relaxed">
-        <span className="font-semibold underline">Directions:</span> Move the words in the boxes to create grammatical sentences. On test day, you will have 6 minutes to complete 10 questions.
+        <span className="font-semibold underline">Directions:</span> Move the words in the boxes to create grammatical sentences. You can drag words or click a word to place it into the next blank.
       </p>
+      <div className="space-y-2">
+        <div className="text-lg font-semibold">Question Set Size</div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => setQuestionCount(5)}
+            className={`px-3 py-2 rounded border ${questionCount === 5 ? "bg-accent text-white border-accent" : "bg-white text-slate-700 border-slate-300"}`}
+          >
+            5 Questions
+          </button>
+          <button
+            onClick={() => setQuestionCount(10)}
+            className={`px-3 py-2 rounded border ${questionCount === 10 ? "bg-accent text-white border-accent" : "bg-white text-slate-700 border-slate-300"}`}
+          >
+            10 Questions
+          </button>
+        </div>
+      </div>
       <div className="space-y-2">
         <div className="text-lg font-semibold">Difficulty</div>
         <div className="flex flex-wrap gap-2">
@@ -410,11 +437,20 @@ function SentencePracticeSection() {
           >
             Tough
           </button>
+          <button
+            onClick={() => setDifficultyLevel("extra_tough")}
+            className={`px-3 py-2 rounded border ${difficultyLevel === "extra_tough" ? "bg-accent text-white border-accent" : "bg-white text-slate-700 border-slate-300"}`}
+          >
+            Extra Tough
+          </button>
         </div>
         <div className="text-sm text-slate-600">
           {difficultyLevel === "easy" ? "Easy: simpler sentence options and easier patterns." : null}
           {difficultyLevel === "hard" ? "Hard: tougher questions with more challenging English." : null}
           {difficultyLevel === "tough" ? "Tough: very hard questions with difficult English and grammar." : null}
+          {difficultyLevel === "extra_tough"
+            ? "Extra Tough: very advanced vocabulary, dense grammar, and longer sentence structures."
+            : null}
         </div>
       </div>
       <button
@@ -500,6 +536,7 @@ function SentencePracticeSection() {
                       <span
                         draggable={!used}
                         onDragStart={(e) => e.dataTransfer.setData("text/plain", item.id)}
+                        onClick={() => placeTokenInNextBlank(q.question_id, item.id, q.tokens)}
                         className={`${used ? "text-slate-400" : "cursor-move"} select-none`}
                       >
                         {item.text}
@@ -512,7 +549,11 @@ function SentencePracticeSection() {
               <div className="text-sm text-slate-500">Drag words into the blanks. Click a filled blank to remove a word.</div>
             </div>
           ))}
-          <button onClick={() => void submit()} className="bg-accent2 text-white px-4 py-2 rounded hover:opacity-90">
+          <button
+            onClick={() => void submit()}
+            className="bg-accent2 text-white px-4 py-2 rounded hover:opacity-90 disabled:opacity-50"
+            disabled={!running}
+          >
             Submit Sentence Set
           </button>
         </div>

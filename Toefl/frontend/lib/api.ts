@@ -46,7 +46,7 @@ export async function fetchHistory(): Promise<HistoryItem[]> {
 
 export async function fetchSentenceSet(
   count = 10,
-  difficulty: "normal" | "hard" | "very_hard" = "hard"
+  difficulty: "normal" | "hard" | "very_hard" | "extra_tough" = "hard"
 ): Promise<SentenceSet> {
   return fetchJson<SentenceSet>(`/api/sentence/random?count=${count}&difficulty=${difficulty}`, {
     method: "POST",

@@ -104,6 +104,54 @@ QUESTION_BANK = [
         "answer": "it was absolutely amazing and the crowd was electric!",
         "response_template": ["it", "was", "__", "__", "__", "__", "__", "__", "!"],
     },
+    {
+        "pattern": "question_to_statement_dot_mixed",
+        "prompt": "Which bus should we take to the airport?",
+        "answer": "we need the bus stopping near the tall building across from the park.",
+        "response_template": ["__", "__", "the bus", "__", "near", "__", "__", "__", "__", "__", "."],
+    },
+    {
+        "pattern": "statement_to_statement_dot_mixed",
+        "prompt": "The photocopier keeps jamming after every few pages.",
+        "answer": "i think it's the old paper tray that causes the problem.",
+        "response_template": ["i", "__", "__", "__", "__", "__", "__", "__", "."],
+    },
+    {
+        "pattern": "statement_to_question_qmark_mixed",
+        "prompt": "The train schedule changed again without much notice.",
+        "answer": "should we book seats earlier to avoid confusion?",
+        "response_template": ["__", "__", "__", "earlier", "__", "__", "__", "?"],
+    },
+    {
+        "pattern": "question_to_statement_dot_mixed",
+        "prompt": "Did you book the hotel for our trip?",
+        "answer": "unfortunately, i haven't found any affordable rooms because prices increased again.",
+        "response_template": ["unfortunately,", "__", "__", "found", "__", "__", "__", "__", "__", "__", "."],
+    },
+    {
+        "pattern": "question_to_statement_dot_mixed",
+        "prompt": "Have you found any flexible part-time work yet?",
+        "answer": "i secured a position at a coffee shop ideal for my studies.",
+        "response_template": ["__", "__", "__", "__", "__", "__", "__", "__", "."],
+    },
+    {
+        "pattern": "statement_to_question_qmark_mixed",
+        "prompt": "I think the presentation could start earlier tomorrow morning.",
+        "answer": "would adjusting the agenda affect anyone who has to commute?",
+        "response_template": ["__", "__", "__", "__", "__", "__", "__", "__", "?"],
+    },
+    {
+        "pattern": "question_to_statement_dot_mixed",
+        "prompt": "Have you noticed fresher produce at the new market?",
+        "answer": "it seemed that the quality had improved despite the higher price.",
+        "response_template": ["__", "__", "__", "__", "__", "despite", "__", "__", "."],
+    },
+    {
+        "pattern": "question_to_statement_dot_mixed",
+        "prompt": "When will you finish the report?",
+        "answer": "i probably won't finish the report by Thursday.",
+        "response_template": ["__", "probably", "__", "__", "__", "__", "__", "."],
+    },
 ]
 
 _runtime_sets: dict[str, dict[str, Any]] = {}
@@ -154,11 +202,20 @@ def _words_from_template(answer: str, template: list[str]) -> list[str]:
                 hidden.append(answer_parts[ai])
                 ai += 1
         else:
-            # Advance until template token match (case-insensitive) for robust punctuation handling.
-            while ai < len(answer_parts) and answer_parts[ai].lower() != t.lower():
+            # Support phrase tokens (e.g., "across from") by matching tokenized chunks.
+            target_parts = _tokenize(t)
+            if not target_parts:
+                continue
+            matched = False
+            while ai + len(target_parts) <= len(answer_parts):
+                window = answer_parts[ai : ai + len(target_parts)]
+                if [x.lower() for x in window] == [x.lower() for x in target_parts]:
+                    ai += len(target_parts)
+                    matched = True
+                    break
                 ai += 1
-            if ai < len(answer_parts):
-                ai += 1
+            if not matched:
+                return []
     return hidden
 
 
@@ -182,6 +239,12 @@ def _normalize_sentence(text: str) -> str:
     return " ".join(_tokenize(text.lower()))
 
 
+def _normalize_for_compare(text: str) -> str:
+    lowered = _normalize_sentence(text)
+    lowered = re.sub(r"\s+", " ", lowered).strip()
+    return lowered
+
+
 def _question_key(prompt: str, answer: str) -> str:
     return _normalize_sentence(prompt)
 
@@ -193,7 +256,7 @@ def _coerce_valid_template(answer: str, template: list[str] | None) -> tuple[lis
         if blank_count >= 3:
             hidden = _words_from_template(answer, cleaned)
             rebuilt = _rebuild_from_template(cleaned, hidden)
-            if len(hidden) == blank_count and rebuilt and _normalize_sentence(rebuilt) == _normalize_sentence(answer):
+            if len(hidden) == blank_count and rebuilt and _normalize_for_compare(rebuilt) == _normalize_for_compare(answer):
                 return cleaned, hidden
     return _build_template(answer)
 
@@ -235,8 +298,8 @@ def _generate_with_llm(count: int, avoid_prompts: list[str] | None = None) -> li
     if not api_key:
         _last_llm_error = "OPENAI_API_KEY is not set."
         return []
-    primary_model = os.getenv("OPENAI_MODEL", "gpt-5")
-    model_candidates = [primary_model, "gpt-4o-mini"]
+    primary_model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+    model_candidates = [primary_model, "gpt-4o-mini", "gpt-5"]
     avoid_text = ""
     if avoid_prompts:
         sample = "; ".join(avoid_prompts[:30])
@@ -248,7 +311,10 @@ def _generate_with_llm(count: int, avoid_prompts: list[str] | None = None) -> li
         "prompt: conversational lead sentence/question like 'Were you able to ask the IT team about the issue?' or a context statement like 'I heard Ethan started a new job last month.'. "
         "response_template: token list where some tokens are fixed words and missing words are '__'. "
         "answer: full grammatical response sentence that matches the template. "
-        "Pattern must look like dialogue continuation items, not abstract grammar tasks. Include some items where prompt is a statement and response_template is a follow-up question ending with '?'."
+        "Pattern must look like dialogue continuation items, not abstract grammar tasks. "
+        "Include variety: question->statement, statement->question, concession with 'despite', purpose with 'to avoid', uncertainty with 'probably', and contrast starters like 'unfortunately,'. "
+        "For extra-tough items, prefer advanced vocabulary, denser grammar, longer clauses, and academically styled phrasing. "
+        "Include some items where prompt is a statement and response_template is a follow-up question ending with '?'."
         + avoid_text
     )
     content = ""
@@ -315,8 +381,10 @@ def _apply_difficulty_options(options: list[str], blank_count: int, difficulty: 
             extra_count = random.choice([1, 2])
         else:
             extra_count = 0
-    else:
+    elif difficulty == "very_hard":
         extra_count = random.choice([2, 3])
+    else:
+        extra_count = random.choice([3, 4, 5])
     if extra_count > 0:
         existing = set(w.lower() for w in out)
         candidates = [w for w in DECOY_WORDS if w.lower() not in existing]
@@ -390,7 +458,7 @@ def generate_sentence_set(count: int = 10, difficulty: str = "hard") -> dict[str
             }
         )
 
-    time_minutes = 6
+    time_minutes = 5
     runtime_payload = {
         "set_id": set_id,
         "title": "Build a Sentence",
@@ -447,8 +515,8 @@ def grade_sentence_set(set_id: str, answers: dict[str, str]) -> dict[str, Any] |
     correct = 0
     for q in test_set["questions"]:
         qid = q["question_id"]
-        expected = q["answer"].strip().lower()
-        got = (answers.get(qid) or "").strip().lower()
+        expected = _normalize_for_compare(q["answer"])
+        got = _normalize_for_compare(answers.get(qid) or "")
         ok = got == expected
         if ok:
             correct += 1

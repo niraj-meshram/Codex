@@ -51,7 +51,7 @@ export type SentenceSet = {
   title: string;
   directions: string;
   time_minutes: number;
-  difficulty: "normal" | "hard" | "very_hard";
+  difficulty: "normal" | "hard" | "very_hard" | "extra_tough";
   questions: SentenceQuestion[];
 };
 
