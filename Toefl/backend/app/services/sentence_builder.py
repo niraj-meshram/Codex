@@ -160,6 +160,83 @@ _used_question_order: deque[str] = deque()
 _MAX_USED_QUESTION_MEMORY = 300
 _last_llm_error: str | None = None
 DECOY_WORDS = ["already", "usually", "probably", "around", "earlier", "today", "quickly", "carefully", "really", "maybe", "still", "just"]
+TOPIC_CANDIDATES = [
+    "travel and transportation",
+    "workplace communication",
+    "university and classes",
+    "technology and devices",
+    "health and daily habits",
+    "food, shopping, and prices",
+    "housing and accommodation",
+    "events and scheduling",
+    "finance and budgeting",
+    "community and public services",
+]
+TOPIC_DOMAINS = [
+    "transportation",
+    "education",
+    "healthcare",
+    "technology",
+    "retail",
+    "hospitality",
+    "finance",
+    "housing",
+    "government services",
+    "sports",
+    "media",
+    "environment",
+    "legal services",
+    "manufacturing",
+    "logistics",
+    "energy",
+    "telecommunications",
+    "agriculture",
+    "food services",
+    "public safety",
+]
+TOPIC_CONTEXTS = [
+    "beginner scenario",
+    "urgent scenario",
+    "long-term planning",
+    "customer support case",
+    "team collaboration",
+    "budget limitation",
+    "policy change",
+    "conflict resolution",
+    "time pressure",
+    "quality issue",
+    "service delay",
+    "new opportunity",
+    "unexpected problem",
+    "follow-up discussion",
+    "decision making",
+    "scheduling tradeoff",
+]
+TOPIC_ACTIONS = [
+    "requesting help",
+    "negotiating options",
+    "giving an update",
+    "asking a follow-up question",
+    "proposing a solution",
+    "explaining a cause",
+    "comparing alternatives",
+    "expressing uncertainty",
+    "agreeing politely",
+    "disagreeing respectfully",
+    "summarizing outcomes",
+    "making a recommendation",
+    "checking feasibility",
+    "clarifying constraints",
+    "prioritizing next steps",
+]
+TOPIC_KEYWORDS: dict[str, list[str]] = {
+    "travel": ["airport", "bus", "train", "flight", "trip", "commute", "hotel", "seats"],
+    "work": ["manager", "report", "meeting", "assignment", "deadline", "office", "team"],
+    "education": ["professor", "students", "class", "seminar", "policy", "exam", "presentation"],
+    "technology": ["software", "update", "errors", "it", "photocopier", "device", "system"],
+    "shopping_food": ["market", "produce", "price", "restaurant", "lunch", "coffee", "shop"],
+    "daily_life": ["schedule", "tomorrow", "week", "afternoon", "morning", "today"],
+}
 
 
 def _tokenize(sentence: str) -> list[str]:
@@ -245,6 +322,65 @@ def _normalize_for_compare(text: str) -> str:
     return lowered
 
 
+def _topic_seed_text(count: int) -> str:
+    # Build topic combinations dynamically: domains x contexts x actions -> thousands of possibilities.
+    target = min(max(8, count * 2), 20)
+    seeds: list[str] = []
+    seen: set[str] = set()
+    while len(seeds) < target:
+        domain = random.choice(TOPIC_DOMAINS)
+        context = random.choice(TOPIC_CONTEXTS)
+        action = random.choice(TOPIC_ACTIONS)
+        topic = f"{domain} | {context} | {action}"
+        if topic in seen:
+            continue
+        seen.add(topic)
+        seeds.append(topic)
+        if len(seen) > 2000:
+            break
+    base_take = min(len(TOPIC_CANDIDATES), max(3, count // 2))
+    base = random.sample(TOPIC_CANDIDATES, k=base_take)
+    return "; ".join(base + seeds)
+
+
+def _infer_topic(prompt: str, answer: str) -> str:
+    text = f"{prompt} {answer}".lower()
+    for topic, keywords in TOPIC_KEYWORDS.items():
+        if any(k in text for k in keywords):
+            return topic
+    return "other"
+
+
+def _select_topic_diverse(items: list[dict[str, Any]], count: int) -> list[dict[str, Any]]:
+    if len(items) <= count:
+        return items[:count]
+    buckets: dict[str, list[dict[str, Any]]] = {}
+    for item in items:
+        key = _infer_topic(item.get("prompt", ""), item.get("answer", ""))
+        buckets.setdefault(key, []).append(item)
+    for vals in buckets.values():
+        random.shuffle(vals)
+    ordered_topics = sorted(buckets.keys(), key=lambda t: len(buckets[t]), reverse=True)
+    out: list[dict[str, Any]] = []
+    while len(out) < count:
+        progressed = False
+        for topic in ordered_topics:
+            if buckets[topic]:
+                out.append(buckets[topic].pop())
+                progressed = True
+                if len(out) >= count:
+                    break
+        if not progressed:
+            break
+    if len(out) < count:
+        leftovers: list[dict[str, Any]] = []
+        for topic in ordered_topics:
+            leftovers.extend(buckets[topic])
+        random.shuffle(leftovers)
+        out.extend(leftovers[: count - len(out)])
+    return out[:count]
+
+
 def _question_key(prompt: str, answer: str) -> str:
     return _normalize_sentence(prompt)
 
@@ -314,6 +450,8 @@ def _generate_with_llm(count: int, avoid_prompts: list[str] | None = None) -> li
         "Pattern must look like dialogue continuation items, not abstract grammar tasks. "
         "Include variety: question->statement, statement->question, concession with 'despite', purpose with 'to avoid', uncertainty with 'probably', and contrast starters like 'unfortunately,'. "
         "For extra-tough items, prefer advanced vocabulary, denser grammar, longer clauses, and academically styled phrasing. "
+        f"Distribute items across multiple topics such as: {_topic_seed_text(count)}. "
+        "Avoid concentrating many items on one topic in a single set. "
         "Include some items where prompt is a statement and response_template is a follow-up question ending with '?'."
         + avoid_text
     )
@@ -429,7 +567,7 @@ def generate_sentence_set(count: int = 10, difficulty: str = "hard") -> dict[str
     if len(fresh) < count:
         detail = _last_llm_error or "LLM returned insufficient unique items."
         raise RuntimeError(f"Unable to generate enough non-repeating sentence questions. {detail}")
-    picks = fresh[:count]
+    picks = _select_topic_diverse(fresh, count)
     set_id = f"sentence-{uuid.uuid4().hex[:8]}"
     questions = []
     for i, item in enumerate(picks, start=1):
@@ -447,6 +585,7 @@ def generate_sentence_set(count: int = 10, difficulty: str = "hard") -> dict[str
                     options.append(words[len(options) % len(words)])
 
         options = _apply_difficulty_options(options, blank_count, difficulty)
+        options = [opt.lower() for opt in options]
 
         questions.append(
             {
