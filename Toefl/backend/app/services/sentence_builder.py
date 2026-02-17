@@ -152,6 +152,42 @@ QUESTION_BANK = [
         "answer": "i probably won't finish the report by Thursday.",
         "response_template": ["__", "probably", "__", "__", "__", "__", "__", "."],
     },
+    {
+        "pattern": "statement_to_statement_dot_mixed",
+        "prompt": "People asked how the city tour went.",
+        "answer": "the tour guides who showed us around the old city were fantastic.",
+        "response_template": ["the", "__", "__", "__", "__", "__", "__", "__", "__", "."],
+    },
+    {
+        "pattern": "statement_to_question_qmark_mixed",
+        "prompt": "You selected a different topic for your presentation.",
+        "answer": "why did you choose that topic?",
+        "response_template": ["why", "__", "__", "__", "__", "?"],
+    },
+    {
+        "pattern": "statement_to_question_qmark_mixed",
+        "prompt": "I still have not seen your submission.",
+        "answer": "did you finish the assignment?",
+        "response_template": ["did", "__", "__", "__", "?"],
+    },
+    {
+        "pattern": "question_to_statement_dot_mixed",
+        "prompt": "Can we compare these two proposals quickly?",
+        "answer": "the first option is more practical than the second one.",
+        "response_template": ["the", "__", "__", "__", "__", "__", "__", "__", "__", "."],
+    },
+    {
+        "pattern": "statement_to_statement_dot_mixed",
+        "prompt": "We need a backup plan in case attendance drops.",
+        "answer": "if attendance drops, we will move the session online.",
+        "response_template": ["if", "__", "__", "__", "__", "__", "__", "__", "."],
+    },
+    {
+        "pattern": "statement_to_statement_dot_mixed",
+        "prompt": "Students are waiting for the final materials.",
+        "answer": "the package was delivered this morning and is required for class.",
+        "response_template": ["the", "__", "__", "__", "__", "__", "__", "__", "__", "__", "."],
+    },
 ]
 
 _runtime_sets: dict[str, dict[str, Any]] = {}
@@ -351,6 +387,58 @@ def _infer_topic(prompt: str, answer: str) -> str:
     return "other"
 
 
+def _infer_pattern_label(prompt: str, answer: str) -> str:
+    p = (prompt or "").strip()
+    a = (answer or "").strip()
+    prompt_is_question = p.endswith("?")
+    if a.endswith("?"):
+        return "statement_to_question_qmark" if not prompt_is_question else "question_to_question_qmark"
+    if a.endswith("!"):
+        return "statement_to_exclamation_bang" if not prompt_is_question else "question_to_exclamation_bang"
+    return "question_to_statement_dot_mixed" if prompt_is_question else "statement_to_statement_dot_mixed"
+
+
+def _infer_context_label(prompt: str, answer: str) -> str:
+    text = f"{prompt} {answer}".lower()
+    campus_terms = ["class", "assignment", "office hours", "advisor", "course", "lab", "professor", "campus"]
+    return "campus" if any(t in text for t in campus_terms) else "social"
+
+
+def _infer_grammar_tags(prompt: str, answer: str) -> set[str]:
+    text = f"{prompt} {answer}".lower()
+    tags: set[str] = set()
+    if any(t in text for t in ["yesterday", "last week", "since", "already", "yet"]):
+        tags.add("tense_time")
+    if any(t in text for t in [" often ", " already ", " never "]):
+        tags.add("subject_verb_order")
+    if any(t in text for t in ["a ", "an ", " the ", "this ", "that ", "some ", "any "]):
+        tags.add("articles_determiners")
+    if any(t in text for t in [" in ", " on ", " at ", " to ", " for ", " from ", " with "]):
+        tags.add("prepositions")
+    if any(t in text for t in ["can ", "could ", "should ", "might ", "must "]):
+        tags.add("modals")
+    if any(t in text for t in ["better than", "most "]):
+        tags.add("comparatives_superlatives")
+    if any(t in text for t in ["was completed", "is required", "was submitted", "were updated"]):
+        tags.add("passive_voice")
+    if any(t in text for t in [" because ", " although ", " if ", " who ", " that ", " which "]):
+        tags.add("clauses")
+    if " if " in text:
+        tags.add("conditionals")
+    if text.strip().endswith("?"):
+        tags.add("question_word_order")
+    return tags
+
+
+def _format_group(pattern: str) -> str:
+    p = (pattern or "").lower()
+    if "to_question" in p or p.endswith("_qmark"):
+        return "question"
+    if "exclamation" in p or p.endswith("_bang"):
+        return "exclamation"
+    return "statement"
+
+
 def _select_topic_diverse(items: list[dict[str, Any]], count: int) -> list[dict[str, Any]]:
     if len(items) <= count:
         return items[:count]
@@ -378,6 +466,115 @@ def _select_topic_diverse(items: list[dict[str, Any]], count: int) -> list[dict[
             leftovers.extend(buckets[topic])
         random.shuffle(leftovers)
         out.extend(leftovers[: count - len(out)])
+    return out[:count]
+
+
+def _select_balanced(items: list[dict[str, Any]], count: int) -> list[dict[str, Any]]:
+    if len(items) <= count:
+        return items[:count]
+
+    pool = list(items)
+    random.shuffle(pool)
+    out: list[dict[str, Any]] = []
+    used_ids: set[int] = set()
+
+    # 1) Ensure question format coverage first.
+    format_buckets: dict[str, list[tuple[int, dict[str, Any]]]] = {}
+    for i, item in enumerate(pool):
+        fg = _format_group(str(item.get("pattern", "")))
+        format_buckets.setdefault(fg, []).append((i, item))
+
+    for fg in ["statement", "question", "exclamation"]:
+        choices = format_buckets.get(fg) or []
+        if choices and len(out) < count:
+            idx, pick = random.choice(choices)
+            if idx not in used_ids:
+                out.append(pick)
+                used_ids.add(idx)
+
+    # 2) Add topic variety next.
+    topic_buckets: dict[str, list[tuple[int, dict[str, Any]]]] = {}
+    for i, item in enumerate(pool):
+        if i in used_ids:
+            continue
+        tk = _infer_topic(item.get("prompt", ""), item.get("answer", ""))
+        topic_buckets.setdefault(tk, []).append((i, item))
+    topic_order = sorted(topic_buckets.keys(), key=lambda t: len(topic_buckets[t]), reverse=True)
+    topic_target = min(max(4, count // 2), count - len(out))
+    while len(out) < count and topic_target > 0:
+        progressed = False
+        for t in topic_order:
+            if topic_target <= 0 or len(out) >= count:
+                break
+            bucket = topic_buckets.get(t) or []
+            if not bucket:
+                continue
+            idx, pick = bucket.pop()
+            if idx in used_ids:
+                continue
+            out.append(pick)
+            used_ids.add(idx)
+            topic_target -= 1
+            progressed = True
+        if not progressed:
+            break
+
+    # 3) Ensure both reply contexts (social/campus) appear when possible.
+    needed_contexts = {"social", "campus"}
+    for existing in out:
+        needed_contexts.discard(str(existing.get("context", "")))
+    if needed_contexts and len(out) < count:
+        for i, item in enumerate(pool):
+            if len(out) >= count:
+                break
+            if i in used_ids:
+                continue
+            if str(item.get("context", "")) in needed_contexts:
+                out.append(item)
+                used_ids.add(i)
+                needed_contexts.discard(str(item.get("context", "")))
+            if not needed_contexts:
+                break
+
+    # 4) Ensure core grammar focus areas are represented when possible.
+    target_grammar = {
+        "subject_verb_order",
+        "tense_time",
+        "question_word_order",
+        "articles_determiners",
+        "prepositions",
+        "modals",
+        "clauses",
+        "comparatives_superlatives",
+        "conditionals",
+        "passive_voice",
+    }
+    existing_tags: set[str] = set()
+    for existing in out:
+        existing_tags.update(set(existing.get("grammar_tags", set())))
+    missing = target_grammar - existing_tags
+    if missing and len(out) < count:
+        for i, item in enumerate(pool):
+            if len(out) >= count:
+                break
+            if i in used_ids:
+                continue
+            tags = set(item.get("grammar_tags", set()))
+            if tags.intersection(missing):
+                out.append(item)
+                used_ids.add(i)
+                missing -= tags
+            if not missing:
+                break
+
+    # 5) Fill remaining slots from the rest.
+    for i, item in enumerate(pool):
+        if len(out) >= count:
+            break
+        if i in used_ids:
+            continue
+        out.append(item)
+        used_ids.add(i)
     return out[:count]
 
 
@@ -447,6 +644,9 @@ def _generate_with_llm(count: int, avoid_prompts: list[str] | None = None) -> li
         "prompt: conversational lead sentence/question like 'Were you able to ask the IT team about the issue?' or a context statement like 'I heard Ethan started a new job last month.'. "
         "response_template: token list where some tokens are fixed words and missing words are '__'. "
         "answer: full grammatical response sentence that matches the template. "
+        "Cover sentence types: statement responses, WH-questions, yes/no questions, and natural reply-to-a-question mini dialogue. "
+        "Use both daily social contexts and campus/academic contexts (class, assignments, office hours, schedules). "
+        "Target grammar focus areas across the set: subject-verb order with adverbs, tense+auxiliaries, prepositional phrases, relative clauses, comparatives/superlatives, conditionals, passive voice, and correct punctuation in questions/longer sentences. "
         "Pattern must look like dialogue continuation items, not abstract grammar tasks. "
         "Include variety: question->statement, statement->question, concession with 'despite', purpose with 'to avoid', uncertainty with 'probably', and contrast starters like 'unfortunately,'. "
         "For extra-tough items, prefer advanced vocabulary, denser grammar, longer clauses, and academically styled phrasing. "
@@ -502,9 +702,26 @@ def _generate_with_llm(count: int, avoid_prompts: list[str] | None = None) -> li
             continue
         seen.add(key)
         if isinstance(template, list) and template.count("__") >= 3:
-            valid.append({"prompt": prompt, "answer": answer, "response_template": template})
+            valid.append(
+                {
+                    "prompt": prompt,
+                    "answer": answer,
+                    "response_template": template,
+                    "pattern": _infer_pattern_label(prompt, answer),
+                    "context": _infer_context_label(prompt, answer),
+                    "grammar_tags": _infer_grammar_tags(prompt, answer),
+                }
+            )
         else:
-            valid.append({"prompt": prompt, "answer": answer})
+            valid.append(
+                {
+                    "prompt": prompt,
+                    "answer": answer,
+                    "pattern": _infer_pattern_label(prompt, answer),
+                    "context": _infer_context_label(prompt, answer),
+                    "grammar_tags": _infer_grammar_tags(prompt, answer),
+                }
+            )
     random.shuffle(valid)
     return valid
 
@@ -560,6 +777,9 @@ def generate_sentence_set(count: int = 10, difficulty: str = "hard") -> dict[str
                     "prompt": q["prompt"],
                     "answer": q["answer"],
                     "response_template": q["response_template"],
+                    "pattern": q.get("pattern", _infer_pattern_label(q["prompt"], q["answer"])),
+                    "context": _infer_context_label(q["prompt"], q["answer"]),
+                    "grammar_tags": _infer_grammar_tags(q["prompt"], q["answer"]),
                 }
             )
             if len(fresh) >= count:
@@ -567,7 +787,7 @@ def generate_sentence_set(count: int = 10, difficulty: str = "hard") -> dict[str
     if len(fresh) < count:
         detail = _last_llm_error or "LLM returned insufficient unique items."
         raise RuntimeError(f"Unable to generate enough non-repeating sentence questions. {detail}")
-    picks = _select_topic_diverse(fresh, count)
+    picks = _select_balanced(fresh, count)
     set_id = f"sentence-{uuid.uuid4().hex[:8]}"
     questions = []
     for i, item in enumerate(picks, start=1):
