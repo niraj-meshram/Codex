@@ -387,16 +387,14 @@ function SentencePracticeSection() {
   const ss = String(secondsLeft % 60).padStart(2, "0");
 
   return (
-    <section className="p-6 md:p-8 space-y-6 bg-[#ececec] rounded">
-      <div className="text-center space-y-2">
-        <h2 className="text-4xl font-semibold">Build a Sentence</h2>
-      </div>
-      <div className="sticky top-2 z-20">
-        <div className="mx-auto w-fit rounded-lg border border-slate-300 bg-white/95 px-4 py-2 text-lg font-semibold shadow-sm backdrop-blur">
+    <section className="card p-4 md:p-6 space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-xl font-semibold">Section 3: Build a Sentence (5 minutes)</h2>
+        <div className="text-lg font-semibold">
           Timer: {mm}:{ss}
         </div>
       </div>
-      <p className="text-3xl leading-relaxed">
+      <p className="text-slate-700">
         <span className="font-semibold underline">Directions:</span> Move the words in the boxes to create grammatical sentences. You can drag words or click a word to place it into the next blank.
       </p>
       <div className="space-y-2">
@@ -465,21 +463,21 @@ function SentencePracticeSection() {
       {setData ? (
         <div className="space-y-8">
           {setData.questions.map((q, idx) => (
-            <div key={q.question_id} className="space-y-4">
-              <div className="font-semibold text-3xl">{idx + 1}.</div>
+            <div key={q.question_id} className="card p-4 md:p-6 space-y-4">
+              <div className="font-semibold text-lg">{idx + 1}.</div>
               <div className="flex items-start gap-3">
                 <img
                   src={avatarUrl(`${setData.set_id}-${q.question_id}-speaker`)}
                   alt="speaker avatar"
-                  className="h-16 w-16 rounded-full border-2 border-teal-400 bg-white shrink-0"
+                  className="h-12 w-12 rounded-full border border-slate-300 bg-white shrink-0"
                 />
-                <p className="text-4xl">{q.prompt}</p>
+                <p className="text-base md:text-lg text-slate-900">{q.prompt}</p>
               </div>
               <div className="flex items-start gap-3">
                 <img
                   src={avatarUrl(`${setData.set_id}-${q.question_id}-response`)}
                   alt="response avatar"
-                  className="h-16 w-16 rounded-full border-2 border-teal-400 bg-white shrink-0"
+                  className="h-12 w-12 rounded-full border border-slate-300 bg-white shrink-0"
                 />
                 <div className="flex flex-wrap gap-2 items-end">
                   {(() => {
@@ -488,7 +486,7 @@ function SentencePracticeSection() {
                     return q.response_template.map((part, idx2) => {
                       if (part !== "__") {
                         return (
-                          <span key={`${q.question_id}-txt-${idx2}`} className="text-3xl text-slate-800">
+                          <span key={`${q.question_id}-txt-${idx2}`} className="text-base md:text-lg text-slate-800">
                             {part}
                           </span>
                         );
@@ -511,7 +509,7 @@ function SentencePracticeSection() {
                             const id = e.dataTransfer.getData("text/plain");
                             handleDrop(q.question_id, sIdx, id, q.tokens);
                           }}
-                          className="min-w-16 px-1 py-1 border-b-2 border-slate-400 bg-transparent text-slate-500 text-3xl text-left focus:outline-none focus:ring-0 active:outline-none"
+                          className="min-w-16 px-1 py-1 border-b-2 border-slate-400 bg-transparent text-slate-700 text-base md:text-lg text-left focus:outline-none focus:ring-0 active:outline-none"
                         >
                           {tokenText || <span className="invisible">word</span>}
                         </button>
@@ -521,7 +519,7 @@ function SentencePracticeSection() {
                 </div>
               </div>
               <div
-                className="text-4xl text-slate-700 flex flex-wrap items-center gap-2"
+                className="text-base md:text-lg text-slate-700 flex flex-wrap items-center gap-2"
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={(e) => {
                   e.preventDefault();

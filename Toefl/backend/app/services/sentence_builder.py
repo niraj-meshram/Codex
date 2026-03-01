@@ -409,6 +409,8 @@ def _infer_grammar_tags(prompt: str, answer: str) -> set[str]:
     tags: set[str] = set()
     if any(t in text for t in ["yesterday", "last week", "since", "already", "yet"]):
         tags.add("tense_time")
+    if any(t in text for t in [" do ", " does ", " did ", " has ", " have ", " will ", " can "]):
+        tags.add("auxiliaries")
     if any(t in text for t in [" often ", " already ", " never "]):
         tags.add("subject_verb_order")
     if any(t in text for t in ["a ", "an ", " the ", "this ", "that ", "some ", "any "]):
@@ -437,6 +439,16 @@ def _format_group(pattern: str) -> str:
     if "exclamation" in p or p.endswith("_bang"):
         return "exclamation"
     return "statement"
+
+
+def _pattern_family(prompt: str, answer: str) -> str:
+    prompt_is_question = (prompt or "").strip().endswith("?")
+    answer_is_question = (answer or "").strip().endswith("?")
+    if answer_is_question:
+        return "interrogative"
+    if prompt_is_question:
+        return "reply_to_question"
+    return "statement_response"
 
 
 def _select_topic_diverse(items: list[dict[str, Any]], count: int) -> list[dict[str, Any]]:
@@ -478,21 +490,88 @@ def _select_balanced(items: list[dict[str, Any]], count: int) -> list[dict[str, 
     out: list[dict[str, Any]] = []
     used_ids: set[int] = set()
 
-    # 1) Ensure question format coverage first.
+    # 1) Seed required families first so every set includes all key types when available.
+    required_families = ["statement_response", "interrogative", "reply_to_question"]
+    for family in required_families:
+        for i, item in enumerate(pool):
+            if i in used_ids:
+                continue
+            if _pattern_family(item.get("prompt", ""), item.get("answer", "")) == family:
+                out.append(item)
+                used_ids.add(i)
+                break
+
+    # If room permits, add one more interrogative and one more reply-to-question for better coverage.
+    if count >= 8:
+        for family in ["interrogative", "reply_to_question"]:
+            for i, item in enumerate(pool):
+                if len(out) >= count:
+                    break
+                if i in used_ids:
+                    continue
+                if _pattern_family(item.get("prompt", ""), item.get("answer", "")) == family:
+                    out.append(item)
+                    used_ids.add(i)
+                    break
+
+    # 2) Enforce format quotas to avoid question-heavy sets.
+    # Target profile: mostly statements, some questions, and optional exclamation.
+    target_statement = max(3, int(round(count * 0.5)))
+    target_question = max(2, int(round(count * 0.25)))
+    target_exclamation = 1 if count >= 8 else 0
+
     format_buckets: dict[str, list[tuple[int, dict[str, Any]]]] = {}
     for i, item in enumerate(pool):
         fg = _format_group(str(item.get("pattern", "")))
         format_buckets.setdefault(fg, []).append((i, item))
 
-    for fg in ["statement", "question", "exclamation"]:
-        choices = format_buckets.get(fg) or []
-        if choices and len(out) < count:
-            idx, pick = random.choice(choices)
-            if idx not in used_ids:
-                out.append(pick)
-                used_ids.add(idx)
+    def take_from_bucket(fmt: str, n: int) -> None:
+        nonlocal out, used_ids
+        bucket = format_buckets.get(fmt) or []
+        random.shuffle(bucket)
+        taken = 0
+        for idx, pick in bucket:
+            if len(out) >= count or taken >= n:
+                break
+            if idx in used_ids:
+                continue
+            out.append(pick)
+            used_ids.add(idx)
+            taken += 1
 
-    # 2) Add topic variety next.
+    current_question = sum(1 for x in out if _format_group(str(x.get("pattern", ""))) == "question")
+    current_statement = sum(1 for x in out if _format_group(str(x.get("pattern", ""))) == "statement")
+    current_exclamation = sum(1 for x in out if _format_group(str(x.get("pattern", ""))) == "exclamation")
+
+    take_from_bucket("statement", max(0, target_statement - current_statement))
+    take_from_bucket("question", max(0, target_question - current_question))
+    take_from_bucket("exclamation", max(0, target_exclamation - current_exclamation))
+
+    # If we still have room, top up with non-question first.
+    for fmt in ["statement", "exclamation", "question"]:
+        if len(out) >= count:
+            break
+        take_from_bucket(fmt, count - len(out))
+
+    # 3) Re-check families after quota fill and backfill if still missing.
+    required_family_set = {"statement_response", "interrogative", "reply_to_question"}
+    present = set(_pattern_family(x.get("prompt", ""), x.get("answer", "")) for x in out)
+    missing_families = required_family_set - present
+    if missing_families and len(out) < count:
+        for i, item in enumerate(pool):
+            if len(out) >= count:
+                break
+            if i in used_ids:
+                continue
+            fam = _pattern_family(item.get("prompt", ""), item.get("answer", ""))
+            if fam in missing_families:
+                out.append(item)
+                used_ids.add(i)
+                missing_families.discard(fam)
+            if not missing_families:
+                break
+
+    # 4) Add topic variety next.
     topic_buckets: dict[str, list[tuple[int, dict[str, Any]]]] = {}
     for i, item in enumerate(pool):
         if i in used_ids:
@@ -519,7 +598,7 @@ def _select_balanced(items: list[dict[str, Any]], count: int) -> list[dict[str, 
         if not progressed:
             break
 
-    # 3) Ensure both reply contexts (social/campus) appear when possible.
+    # 5) Ensure both reply contexts (social/campus) appear when possible.
     needed_contexts = {"social", "campus"}
     for existing in out:
         needed_contexts.discard(str(existing.get("context", "")))
@@ -536,10 +615,11 @@ def _select_balanced(items: list[dict[str, Any]], count: int) -> list[dict[str, 
             if not needed_contexts:
                 break
 
-    # 4) Ensure core grammar focus areas are represented when possible.
+    # 6) Ensure core grammar focus areas are represented when possible.
     target_grammar = {
         "subject_verb_order",
         "tense_time",
+        "auxiliaries",
         "question_word_order",
         "articles_determiners",
         "prepositions",
@@ -567,7 +647,7 @@ def _select_balanced(items: list[dict[str, Any]], count: int) -> list[dict[str, 
             if not missing:
                 break
 
-    # 5) Fill remaining slots from the rest.
+    # 7) Fill remaining slots from the rest.
     for i, item in enumerate(pool):
         if len(out) >= count:
             break
@@ -617,6 +697,9 @@ def _extract_json(text: str) -> list[dict[str, Any]]:
             rt = rt.split()
         if isinstance(rt, list):
             rt = [str(x).strip() for x in rt if str(x).strip()]
+            # Reject single-sentence template arrays; template must be tokenized.
+            if len(rt) == 1 and " " in rt[0]:
+                rt = None
         if p and a:
             out: dict[str, Any] = {"prompt": p, "answer": a}
             if rt:
@@ -645,6 +728,7 @@ def _generate_with_llm(count: int, avoid_prompts: list[str] | None = None) -> li
         "response_template: token list where some tokens are fixed words and missing words are '__'. "
         "answer: full grammatical response sentence that matches the template. "
         "Cover sentence types: statement responses, WH-questions, yes/no questions, and natural reply-to-a-question mini dialogue. "
+        "Important balance rule: in each batch, at least 50% answers must be statement responses (ending with '.'), around 30% may be questions (ending with '?'), and include at least one exclamation-style response when suitable. "
         "Use both daily social contexts and campus/academic contexts (class, assignments, office hours, schedules). "
         "Target grammar focus areas across the set: subject-verb order with adverbs, tense+auxiliaries, prepositional phrases, relative clauses, comparatives/superlatives, conditionals, passive voice, and correct punctuation in questions/longer sentences. "
         "Pattern must look like dialogue continuation items, not abstract grammar tasks. "
