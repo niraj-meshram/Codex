@@ -18,6 +18,29 @@ function buildEmailScenario(rawText: string): string {
   return cleaned;
 }
 
+function extractLongTokens(text: string): string[] {
+  return (text.match(/[a-zA-Z]{4,}/g) || []).map((x) => x.toLowerCase());
+}
+
+function emailChecklist(userText: string, bullets: string[]) {
+  const text = userText || "";
+  const lower = text.toLowerCase();
+  const hasSubjectLine = /^subject\s*:/im.test(text);
+  const hasGreeting = /^(dear|hello|hi)\b/im.test(text.trim());
+  const hasSignoff = /\b(sincerely|best|regards|thank you)\b/im.test(text);
+  const bulletCoverage = bullets.map((b) => {
+    const keys = extractLongTokens(b).slice(0, 4);
+    return { bullet: b, covered: keys.length ? keys.some((k) => lower.includes(k)) : false };
+  });
+  return {
+    hasSubjectLine,
+    hasGreeting,
+    hasSignoff,
+    coveredCount: bulletCoverage.filter((x) => x.covered).length,
+    totalBullets: bulletCoverage.length,
+  };
+}
+
 function avatarUrl(seed: string): string {
   return `https://api.dicebear.com/9.x/adventurer/svg?seed=${encodeURIComponent(seed)}`;
 }
@@ -33,6 +56,10 @@ function PracticeSection({ taskType, heading }: { taskType: TaskType; heading: s
   const [submitting, setSubmitting] = useState(false);
 
   const wordCount = useMemo(() => countWords(text), [text]);
+  const emailChecks = useMemo(
+    () => (prompt?.task_type === "email" ? emailChecklist(text, prompt.bullet_points || []) : null),
+    [prompt, text]
+  );
 
   useEffect(() => {
     if (!running || secondsLeft <= 0) return;
@@ -119,6 +146,14 @@ function PracticeSection({ taskType, heading }: { taskType: TaskType; heading: s
                 )}
               </ul>
               <p>Write as much as you can and in complete sentences.</p>
+              <div className="bg-slate-50 border rounded p-3 text-sm text-slate-700">
+                <div className="font-semibold mb-1">Task Pattern</div>
+                <ul className="list-disc pl-5">
+                  <li>Use email structure: subject line, greeting, body, sign-off.</li>
+                  <li>Address every required point in the prompt.</li>
+                  <li>Keep tone polite, clear, and actionable.</li>
+                </ul>
+              </div>
               <div className="pt-2 border-t border-slate-200">
                 <div className="font-semibold">Your Response:</div>
               </div>
@@ -168,10 +203,49 @@ function PracticeSection({ taskType, heading }: { taskType: TaskType; heading: s
                 : "Write your academic discussion response here..."
             }
           />
+          {prompt.task_type === "email" ? (
+            <div className="flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  if (!prompt || prompt.task_type !== "email") return;
+                  const recipient = prompt.to_field || "Professor";
+                  const subject = prompt.subject || "Response";
+                  const starter = `Subject: ${subject}\n\nDear ${recipient},\n\nThank you for your message.\n\n${(prompt.bullet_points || [])
+                    .map((b, i) => `${i + 1}. ${b}`)
+                    .join("\n")}\n\nBest regards,\n[Your Name]`;
+                  setText(starter);
+                }}
+                className="px-3 py-2 rounded border border-slate-300 text-slate-700 hover:bg-slate-50"
+              >
+                Use Email Template
+              </button>
+              <div className="text-xs text-slate-500">Optional starter to match email-format expectations.</div>
+            </div>
+          ) : null}
           <div className="flex items-center justify-between text-sm text-slate-600">
             <div>Words: {wordCount}</div>
             {prompt.constraints.min_words > 0 ? <div>Minimum required: {prompt.constraints.min_words}</div> : null}
           </div>
+          {prompt.task_type === "email" && emailChecks ? (
+            <div className="bg-slate-50 border rounded p-3 text-sm space-y-2">
+              <div className="font-semibold">Live Email Checklist</div>
+              <div className="grid md:grid-cols-3 gap-2">
+                <div className={emailChecks.hasSubjectLine ? "text-emerald-700" : "text-amber-700"}>
+                  Subject line: {emailChecks.hasSubjectLine ? "yes" : "missing"}
+                </div>
+                <div className={emailChecks.hasGreeting ? "text-emerald-700" : "text-amber-700"}>
+                  Greeting: {emailChecks.hasGreeting ? "yes" : "missing"}
+                </div>
+                <div className={emailChecks.hasSignoff ? "text-emerald-700" : "text-amber-700"}>
+                  Sign-off: {emailChecks.hasSignoff ? "yes" : "missing"}
+                </div>
+              </div>
+              <div>
+                Task points covered: {emailChecks.coveredCount}/{emailChecks.totalBullets}
+              </div>
+            </div>
+          ) : null}
           <button
             onClick={() => void handleSubmit()}
             disabled={!text.trim() || submitting}

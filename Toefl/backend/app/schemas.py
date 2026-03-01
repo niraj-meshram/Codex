@@ -19,6 +19,7 @@ class PromptResponse(BaseModel):
 class SubmitRequest(BaseModel):
     prompt_id: str
     user_text: str
+    student_id: str | None = None
 
 
 class SubmitResponse(BaseModel):
@@ -34,9 +35,11 @@ class SubmitResponse(BaseModel):
 class HistoryItem(BaseModel):
     id: int
     prompt_id: str
+    student_id: str | None = None
     task_type: str
     user_text: str
     scores_json: dict[str, Any]
+    prompt_snapshot: dict[str, Any] | None = None
     created_at: str
 
 

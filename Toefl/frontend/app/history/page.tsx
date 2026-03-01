@@ -37,6 +37,47 @@ export default function HistoryPage() {
               return "Score unavailable";
             })()}
           </div>
+          {item.prompt_snapshot ? (
+            <details>
+              <summary className="cursor-pointer">Show prompt referral</summary>
+              <div className="mt-2 text-sm text-slate-700 space-y-2">
+                <div className="font-medium">{item.prompt_snapshot.title}</div>
+                <p className="whitespace-pre-wrap">{item.prompt_snapshot.raw_text}</p>
+                {item.prompt_snapshot.task_type === "email" ? (
+                  <div>
+                    <div>
+                      <span className="font-semibold">To:</span> {item.prompt_snapshot.to_field || "-"}
+                    </div>
+                    <div>
+                      <span className="font-semibold">Subject:</span> {item.prompt_snapshot.subject || "-"}
+                    </div>
+                    {item.prompt_snapshot.bullet_points?.length ? (
+                      <ul className="list-disc pl-5">
+                        {item.prompt_snapshot.bullet_points.map((b, i) => (
+                          <li key={i}>{b}</li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
+                ) : (
+                  <div>
+                    {item.prompt_snapshot.professor_prompt ? (
+                      <p>
+                        <span className="font-semibold">Professor Prompt:</span> {item.prompt_snapshot.professor_prompt}
+                      </p>
+                    ) : null}
+                    {item.prompt_snapshot.student_posts?.length ? (
+                      <ul className="list-disc pl-5">
+                        {item.prompt_snapshot.student_posts.map((p, i) => (
+                          <li key={i}>{p}</li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
+                )}
+              </div>
+            </details>
+          ) : null}
           <details>
             <summary className="cursor-pointer">Show user response</summary>
             <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">{item.user_text}</p>

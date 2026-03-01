@@ -74,17 +74,20 @@ def score_rubric(prompt: dict[str, Any], user_text: str, checks: dict[str, Any])
     def clamp(v: float) -> float:
         return round(max(0.0, min(5.0, v)), 1)
 
-    task = 2.5
+    task = 0.6
     if prompt.get("task_type") == "email":
         cov = checks.get("task_coverage", [])
         if cov:
-            task += (sum(1 for c in cov if c["covered"]) / len(cov)) * 2
+            task += (sum(1 for c in cov if c["covered"]) / len(cov)) * 3.4
         if checks.get("email_format", {}).get("has_subject_line"):
-            task += 0.3
+            task += 0.4
         if checks.get("email_format", {}).get("has_greeting"):
-            task += 0.1
+            task += 0.3
         if checks.get("email_format", {}).get("has_signoff"):
-            task += 0.1
+            task += 0.3
+        # Practical minimum for meaningful email development.
+        if wc >= 80:
+            task += 0.6
     else:
         if checks.get("responds_to_professor"):
             task += 1.3
@@ -93,24 +96,33 @@ def score_rubric(prompt: dict[str, Any], user_text: str, checks: dict[str, Any])
         if checks.get("meets_min_words"):
             task += 0.8
 
-    org = 2.0 + (0.8 if len(sentences) >= 4 else 0) + (0.8 if "\n\n" in user_text else 0) + (
-        0.8 if re.search(r"\b(first|however|therefore|for example|in conclusion)\b", user_text.lower()) else 0
+    org = 0.7 + (1.2 if len(sentences) >= 4 else 0) + (1.0 if "\n\n" in user_text else 0) + (
+        1.0 if re.search(r"\b(first|however|therefore|for example|in conclusion|also|because)\b", user_text.lower()) else 0
     )
     avg_len = (wc / max(1, len(sentences))) if sentences else 0
-    grammar = 2.0 + (1.0 if len(sentences) >= 3 else 0) + (0.8 if 8 <= avg_len <= 30 else 0)
-    vocab = 2.2 + (0.8 if len(set(re.findall(r"\b\w+\b", user_text.lower()))) > 40 else 0)
+    grammar = 0.8 + (1.3 if len(sentences) >= 3 else 0) + (1.0 if 8 <= avg_len <= 30 else 0)
+    vocab = 0.9 + (1.2 if len(set(re.findall(r"\b\w+\b", user_text.lower()))) > 40 else 0)
 
     if prompt.get("task_type") == "email":
-        vocab += 0.6 if re.search(r"\b(please|would|could|appreciate)\b", user_text.lower()) else 0
+        vocab += 0.9 if re.search(r"\b(please|would|could|appreciate|thank you)\b", user_text.lower()) else 0
     else:
         vocab += 0.6 if re.search(r"\b(i agree|i disagree|in my view|from my perspective)\b", user_text.lower()) else 0
 
-    return {
+    scores = {
         "Task Fulfillment": clamp(task),
         "Organization & Coherence": clamp(org),
         "Grammar & Sentence Structure": clamp(grammar),
         "Vocabulary & Tone": clamp(vocab),
     }
+
+    # Strong low-length controls so trivial responses are scored appropriately.
+    if wc < 8:
+        return {k: min(v, 1.0) for k, v in scores.items()}
+    if wc < 20:
+        return {k: min(v, 1.8) for k, v in scores.items()}
+    if wc < 40:
+        return {k: min(v, 2.6) for k, v in scores.items()}
+    return scores
 
 
 def explain_scores(prompt: dict[str, Any], checks: dict[str, Any], rubric: dict[str, float]) -> dict[str, str]:

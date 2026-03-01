@@ -33,9 +33,11 @@ export type SubmitResult = {
 export type HistoryItem = {
   id: number;
   prompt_id: string;
+  student_id?: string | null;
   task_type: string;
   user_text: string;
   scores_json: SubmitResult | SentenceSubmitResult | Record<string, unknown>;
+  prompt_snapshot?: Prompt | null;
   created_at: string;
 };
 

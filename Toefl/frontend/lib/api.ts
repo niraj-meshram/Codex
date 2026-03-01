@@ -32,6 +32,14 @@ export async function fetchRandomPrompt(taskType: TaskType): Promise<Prompt> {
   });
 }
 
+export async function fetchRandomPromptForStudent(taskType: TaskType, studentId: string): Promise<Prompt> {
+  const sid = encodeURIComponent(studentId);
+  return fetchJson<Prompt>(`/api/prompts/random?task_type=${taskType}&student_id=${sid}`, {
+    method: "POST",
+    cache: "no-store",
+  });
+}
+
 export async function submitAnswer(promptId: string, userText: string): Promise<SubmitResult> {
   return fetchJson<SubmitResult>(`/api/submit`, {
     method: "POST",
@@ -40,8 +48,21 @@ export async function submitAnswer(promptId: string, userText: string): Promise<
   });
 }
 
+export async function submitAnswerForStudent(promptId: string, userText: string, studentId: string): Promise<SubmitResult> {
+  return fetchJson<SubmitResult>(`/api/submit`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt_id: promptId, user_text: userText, student_id: studentId }),
+  });
+}
+
 export async function fetchHistory(): Promise<HistoryItem[]> {
   return fetchJson<HistoryItem[]>(`/api/history`, { cache: "no-store" });
+}
+
+export async function fetchHistoryForStudent(studentId: string): Promise<HistoryItem[]> {
+  const sid = encodeURIComponent(studentId);
+  return fetchJson<HistoryItem[]>(`/api/history?student_id=${sid}`, { cache: "no-store" });
 }
 
 export async function fetchSentenceSet(
