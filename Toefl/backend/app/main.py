@@ -1,4 +1,5 @@
 import json
+import re
 
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -37,6 +38,26 @@ def _ensure_submission_columns() -> None:
 
 
 _ensure_submission_columns()
+
+
+def _sanitize_email_prompt_view(prompt: dict | None) -> dict | None:
+    if not isinstance(prompt, dict):
+        return prompt
+    if str(prompt.get("task_type") or "") != "email":
+        return prompt
+    p = dict(prompt)
+    title = str(p.get("title") or "")
+    title = re.sub(r"\s*\(#?gen-email-[^)]+\)\s*", " ", title, flags=re.IGNORECASE)
+    title = re.sub(r"\s*\([^)]+\|\s*[^)]+\)\s*", " ", title, flags=re.IGNORECASE)
+    title = re.sub(r"\s+", " ", title).strip()
+    p["title"] = title
+    raw = str(p.get("raw_text") or "")
+    raw = re.sub(r"\s*\(#?gen-email-[^)]+\)\s*", " ", raw, flags=re.IGNORECASE).strip()
+    raw = re.sub(r"(?im)^\s*to\s*:\s*.+$", "", raw).strip()
+    raw = re.sub(r"(?im)^\s*subject\s*:\s*.+$", "", raw).strip()
+    raw = re.sub(r"\n{3,}", "\n\n", raw).strip()
+    p["raw_text"] = raw
+    return p
 
 
 @app.post("/api/prompts/random", response_model=PromptResponse)
@@ -107,7 +128,7 @@ def random_prompt(
             if not existing:
                 db.add(PromptUsage(task_type=task_type, source_prompt_id=source_prompt_id))
                 db.commit()
-    return prompt
+    return _sanitize_email_prompt_view(prompt)
 
 
 @app.post("/api/submit", response_model=SubmitResponse)
@@ -119,6 +140,7 @@ def submit(payload: SubmitRequest, db: Session = Depends(get_db)):
 
     result = evaluate_submission(prompt, payload.user_text)
 
+    prompt = _sanitize_email_prompt_view(prompt) or prompt
     row = Submission(
         prompt_id=payload.prompt_id,
         student_id=payload.student_id,
@@ -147,7 +169,7 @@ def history(student_id: str | None = Query(None), db: Session = Depends(get_db))
             "task_type": r.task_type,
             "user_text": r.user_text,
             "scores_json": json.loads(r.scores_json),
-            "prompt_snapshot": json.loads(r.prompt_json) if r.prompt_json else None,
+            "prompt_snapshot": _sanitize_email_prompt_view(json.loads(r.prompt_json)) if r.prompt_json else None,
             "created_at": r.created_at.isoformat() if r.created_at else "",
         }
         for r in rows

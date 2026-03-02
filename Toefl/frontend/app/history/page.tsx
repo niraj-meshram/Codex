@@ -5,6 +5,14 @@ import { useEffect, useState } from "react";
 import { fetchHistory } from "@/lib/api";
 import { HistoryItem } from "@/lib/types";
 
+function cleanEmailLabel(text: string): string {
+  return (text || "")
+    .replace(/\s*\(#?gen-email-[^)]+\)\s*/gi, " ")
+    .replace(/\s*\([^)]+\|\s*[^)]+\)\s*/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export default function HistoryPage() {
   const [items, setItems] = useState<HistoryItem[]>([]);
   const [error, setError] = useState("");
@@ -41,7 +49,11 @@ export default function HistoryPage() {
             <details>
               <summary className="cursor-pointer">Show prompt referral</summary>
               <div className="mt-2 text-sm text-slate-700 space-y-2">
-                <div className="font-medium">{item.prompt_snapshot.title}</div>
+                <div className="font-medium">
+                  {item.prompt_snapshot.task_type === "email"
+                    ? cleanEmailLabel(item.prompt_snapshot.title)
+                    : item.prompt_snapshot.title}
+                </div>
                 <p className="whitespace-pre-wrap">{item.prompt_snapshot.raw_text}</p>
                 {item.prompt_snapshot.task_type === "email" ? (
                   <div>

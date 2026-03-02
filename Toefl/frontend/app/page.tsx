@@ -10,12 +10,23 @@ function countWords(text: string): number {
 }
 
 function buildEmailScenario(rawText: string): string {
-  const cleaned = rawText.replace(/\s+/g, " ").trim();
+  const cleaned = rawText
+    .replace(/\(#?gen-email-[^)]+\)/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
   const idx = cleaned.toLowerCase().indexOf("write an email");
   if (idx > 0) {
     return cleaned.slice(0, idx).trim();
   }
   return cleaned;
+}
+
+function cleanEmailTitle(title: string): string {
+  return (title || "")
+    .replace(/\s*\(#?gen-email-[^)]+\)\s*/gi, " ")
+    .replace(/\s*\([^)]+\)\s*/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function extractLongTokens(text: string): string[] {
@@ -129,9 +140,7 @@ function PracticeSection({ taskType, heading }: { taskType: TaskType; heading: s
 
       {prompt ? (
         <section className="card p-4 md:p-6 space-y-3">
-          <h2 className="text-xl font-semibold">
-            {prompt.title} (#{prompt.prompt_id})
-          </h2>
+          <h2 className="text-xl font-semibold">{prompt.task_type === "email" ? cleanEmailTitle(prompt.title) : prompt.title}</h2>
           {prompt.task_type === "email" ? (
             <div className="space-y-2">
               <p className="text-slate-800 whitespace-pre-wrap">{buildEmailScenario(prompt.raw_text)}</p>
@@ -156,12 +165,6 @@ function PracticeSection({ taskType, heading }: { taskType: TaskType; heading: s
               </div>
               <div className="pt-2 border-t border-slate-200">
                 <div className="font-semibold">Your Response:</div>
-              </div>
-              <div>
-                <span className="font-semibold">To:</span> {prompt.to_field || "-"}
-              </div>
-              <div>
-                <span className="font-semibold">Subject:</span> {prompt.subject || "-"}
               </div>
               <p className="text-sm text-slate-600">Space for typing answers. On test day, you will have 7 minutes to read and write.</p>
             </div>
