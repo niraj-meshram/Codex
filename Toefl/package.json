@@ -2,7 +2,9 @@
   "name": "toefl-writing-monorepo",
   "private": true,
   "scripts": {
-    "dev": "concurrently \"cd backend && uvicorn app.main:app --reload --port 8000\" \"cd frontend && npm run dev\""
+    "dev:backend": "python -m uvicorn backend.app.main:app --reload --port 8010 --app-dir .",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\""
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

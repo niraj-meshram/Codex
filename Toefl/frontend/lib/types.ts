@@ -33,9 +33,11 @@ export type SubmitResult = {
 export type HistoryItem = {
   id: number;
   prompt_id: string;
+  student_id?: string | null;
   task_type: string;
   user_text: string;
-  scores_json: SubmitResult;
+  scores_json: SubmitResult | SentenceSubmitResult | Record<string, unknown>;
+  prompt_snapshot?: Prompt | null;
   created_at: string;
 };
 
@@ -44,7 +46,6 @@ export type SentenceQuestion = {
   prompt: string;
   response_template: string[];
   tokens: string[];
-  answer: string;
 };
 
 export type SentenceSet = {
@@ -52,7 +53,7 @@ export type SentenceSet = {
   title: string;
   directions: string;
   time_minutes: number;
-  difficulty: "normal" | "hard" | "very_hard";
+  difficulty: "normal" | "hard" | "very_hard" | "extra_tough";
   questions: SentenceQuestion[];
 };
 
